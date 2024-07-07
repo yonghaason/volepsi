@@ -12,6 +12,7 @@
 #include "GMW_Tests.h"
 #include "volePSI/GMW/Circuit.h"
 #include "FileBase_Tests.h"
+#include "Benes_Tests.h"
 
 namespace volePSI_Tests
 {
@@ -33,6 +34,8 @@ namespace volePSI_Tests
         t.add("Baxos_solve_mtx_Test        ", Baxos_solve_mtx_Test);
         t.add("Baxos_solve_par_Test        ", Baxos_solve_par_Test);
         t.add("Baxos_solve_rand_Test       ", Baxos_solve_rand_Test);
+
+        t.add("Benes_Test                  ", Benes_Test);
         
 #ifdef VOLE_PSI_ENABLE_GMW
         t.add("SilentTripleGen_test        ", SilentTripleGen_test);

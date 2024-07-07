@@ -5,6 +5,7 @@
 #include "networkSocketExample.h"
 #include "volePSI/fileBased.h"
 #include "tests/Paxos_Tests.h"
+#include "tests/Benes_Tests.h"
 
 int main(int argc, char** argv)
 {
