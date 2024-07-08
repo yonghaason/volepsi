@@ -8,8 +8,8 @@ set(SRCS
     "SimpleIndex.cpp"
     "fileBased.cpp"
     "PS/benes.cpp"
-    # "PS/benes_snark.cpp"
-    # "PS/integer_permutation.cpp"
+    "PS/OSNReceiver.cpp"
+    "PS/OSNSender.cpp"
     )
 
 if(VOLE_PSI_ENABLE_GMW)

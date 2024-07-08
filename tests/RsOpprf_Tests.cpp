@@ -16,7 +16,6 @@ void RsOpprf_eval_blk_test(const CLP&)
     RsOpprfSender sender;
     RsOpprfReceiver recver;
 
-
     auto sockets = cp::LocalAsyncSocket::makePair();
 
 

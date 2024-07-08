@@ -1,128 +1,45 @@
-#include <iostream>
-#include <vector>
-#include <thread>
-#include <string>
+#include "OSN_Tests.h"
+#include "volePSI/Defines.h"
+#include "volePSI/PS/OSNReceiver.h"
+#include "volePSI/PS/OSNSender.h"
 
 #include "cryptoTools/Network/IOService.h"
+#include "cryptoTools/Network/Session.h"
+#include "cryptoTools/Circuit/BetaLibrary.h"
+#include "Common.h"
+#include "coproto/Socket/LocalAsyncSock.h"
 
-#include "OSNReceiver.h"
-#include "OSNSender.h"
+using namespace volePSI;
+using namespace oc;
 
-using namespace osuCrypto;
-using namespace std;
-
-vector<block> sender_shares;
-vector<block> receiver_shares;
-vector<block> receiver_set;
-vector<int> permutation;
-string ip = "127.0.0.1:12345";
-size_t num_threads = 1;
-
-void sender(size_t size)
+void OText_Test(const oc::CLP &cmd)
 {
-	IOService ios;
-	Session session(ios, ip, EpMode::Server);
-	vector<Channel> chls;
-	for (size_t i = 0; i < num_threads; i++)
-	{
-		chls.emplace_back(session.addChannel());
-	}
+	OSNReceiver recver;
+	OSNSender sender;
 
-	OSNSender osn;
-	osn.init(size, 1, "benes");
-	Timer timer;
-	osn.setTimer(timer);
-	timer.setTimePoint("before run_osn");
-	sender_shares = osn.run_osn(chls);
-	/*for (size_t i = 0; i < shares.size(); i++)
-	{
-		cout << i << " " << shares[i] << endl;
-	}*/
-	timer.setTimePoint("after run_osn");
-	permutation = osn.dest;
-	cout << IoStream::lock;
-	cout << "Sender:" << endl;
-	cout << timer << endl;
-	size_t sent = 0, recv = 0;
-	for (auto &chl : chls)
-	{
-		sent += chl.getTotalDataSent();
-		recv += chl.getTotalDataRecv();
-	}
-	cout << "recv: " << recv / 1024.0 / 1024.0 << "MB sent:" << sent / 1024.0 / 1024.0 << "MB "
-		 << "total: " << (recv + sent) / 1024.0 / 1024.0 << "MB" << endl;
-	cout << IoStream::unlock;
-	session.stop();
-}
+	auto sockets = cp::LocalAsyncSocket::makePair();
 
-void receiver(size_t size)
-{
-	receiver_set.resize(size);
-	for (size_t i = 0; i < receiver_set.size(); i++)
-	{
-		receiver_set[i] = toBlock(0, i);
-	}
-	IOService ios;
-	Session session(ios, ip, EpMode::Client);
-	vector<Channel> chls;
-	for (size_t i = 0; i < num_threads; i++)
-	{
-		chls.emplace_back(session.addChannel());
-	}
+	u64 n = cmd.getOr("n", 100);
+	u64 t = cmd.getOr("t", 1);
 
-	OSNReceiver osn;
-	osn.init(receiver_set.size(), 1);
-	Timer timer;
-	osn.setTimer(timer);
-	timer.setTimePoint("before run_osn");
-	receiver_shares = osn.run_osn(receiver_set, chls);
-	timer.setTimePoint("after run_osn");
-	/*
-	for (size_t i = 0; i < shares.size(); i++)
-	{
-		cout << i << " " << shares[i] << endl;
-	}*/
-	cout << IoStream::lock;
-	cout << "Receiver:" << endl;
-	cout << timer << endl;
-	size_t sent = 0, recv = 0;
-	for (auto &chl : chls)
-	{
-		sent += chl.getTotalDataSent();
-		recv += chl.getTotalDataRecv();
-	}
-	cout << "recv: " << recv / 1024.0 / 1024.0 << "MB sent:" << sent / 1024.0 / 1024.0 << "MB "
-		 << "total: " << (recv + sent) / 1024.0 / 1024.0 << "MB" << endl;
-	cout << IoStream::unlock;
-	session.stop();
-}
+	recver.init(n, t);
+	sender.init(n, t);
+	
+	PRNG prng0(block(0, 0));
+	PRNG prng1(block(0, 1));
 
-int check_result(size_t size)
-{
-	int correct_cnt = 0;
-	for (auto i = 0; i < size; i++)
-	{
-		block tmp = sender_shares[i] ^ receiver_shares[i];
-		if (tmp == receiver_set[permutation[i]])
-		{
-			correct_cnt++;
-		}
-	}
-	return correct_cnt;
-}
-int main(int argc, char **argv)
-{
-	size_t size = 1 << atoi(argv[1]);
-	num_threads = atoi(argv[2]);
-	cout << "size:" << size << " num_threads:" << num_threads << endl;
+	auto p0 = sender.genOT(prng0, sockets[0]);
+	auto p1 = recver.genOT(prng1, sockets[1]);
 
-	auto sender_thrd = thread(sender, size);
-	auto receiver_thrd = thread(receiver, size);
-	sender_thrd.join();
-	receiver_thrd.join();
-	if (size == check_result(size))
-		cout << "Correct!" << endl;
-	else
-		cout << "Wrong!" << endl;
-	return 0;
+	eval(p0, p1);
+
+	auto choices = sender.mOtChoices;
+	auto recvMsgs = sender.mOtRecvMsgs;
+	auto sendMsgs = recver.mSendMsgs;
+
+	for (u64 i = 0; i < n; ++i)
+	{
+		if (sendMsgs[i][choices[i]] != recvMsgs[i])
+			throw RTE_LOC;
+	}		
 }

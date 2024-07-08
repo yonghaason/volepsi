@@ -1,31 +1,38 @@
 #pragma once
 
-//#include <cstddef>
-#include <vector>
-#include <string>
-#include <cryptoTools/Common/Defines.h>
-#include <cryptoTools/Common/BitVector.h>
-#include <cryptoTools/Common/Timer.h>
-#include <cryptoTools/Network/Channel.h>
-#include "benes.h"
-class OSNSender
-{
-	size_t size;
-	int ot_type;
-	oc::Timer* timer;
+#include "volePSI/Defines.h"
+#include "volePSI/Paxos.h"
+#include "cryptoTools/Network/IOService.h"
+#include "cryptoTools/Network/Session.h"
+#include <libOTe/TwoChooseOne/Silent/SilentOtExtReceiver.h>
 
-	Benes benes;
-	void silent_ot_recv(osuCrypto::BitVector& choices,
-		std::vector<osuCrypto::block>& recvMsg,
-		std::vector<oc::Channel>& chls);
-	void rand_ot_recv(osuCrypto::BitVector& choices,
-		std::vector<osuCrypto::block>& recvMsg,
-		std::vector<oc::Channel>& chls);
-	std::vector<std::array<osuCrypto::block, 2>> gen_benes_server_osn(int values, std::vector<oc::Channel>& chls);
- public:
-	std::vector<int> dest;
-	OSNSender(size_t size = 0, int ot_type = 0);
-	void init(size_t size, int ot_type = 0, const std::string& osn_cache = "");
-	std::vector<oc::block> run_osn(std::vector<oc::Channel>& chls);
-	void setTimer(oc::Timer& timer);
-};
+#include "benes.h"
+
+namespace volePSI
+{
+	class OSNSender : public oc::TimerAdapter
+	{
+		size_t mN;
+		size_t mLogN;
+		size_t mNumBenesColumns;
+		size_t mNumOts;
+		size_t mNumThreads;
+
+	public:
+		oc::SilentOtExtReceiver mOtRecver;
+		std::vector<block> mOtRecvMsgs;
+		oc::BitVector mOtChoices;
+
+		Benes benes;
+
+		Proto genOT(oc:: PRNG& prng, Socket &chl);		
+		Proto genBenes(std::vector<std::array<block, 2>>& recvMsg, oc:: PRNG& prng, Socket &chl);
+
+	// public:
+		std::vector<int> dest;
+
+		void init(u64 N, u64 numThreads);
+		Proto runOsn(std::vector<block> &share, oc:: PRNG& prng, Socket &chl);
+		Proto runOsnBit(oc::BitVector &share, oc:: PRNG& prng, Socket &chl);
+	};
+}

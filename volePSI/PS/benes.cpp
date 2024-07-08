@@ -12,26 +12,17 @@
 using namespace std;
 using namespace oc;
 
-void Benes::initialize(int values, int levels)
+void Benes::initialize(int N)
 {
-	perm.resize(values);
-	inv_perm.resize(values);
-	switched.resize(levels);
-	for (int i = 0; i < levels; ++i)
-		switched[i].resize(values / 2);
-}
-
-osuCrypto::BitVector Benes::return_switches(int N)
-{
-	int values = 1 << N;
-	int levels = 2 * N - 1;
-	osuCrypto::BitVector switches(values * levels / 2);
-	for (int j = 0; j < levels; ++j)
-		for (int i = 0; i < values / 2; ++i)
-		{
-			switches[(values * j) / 2 + i] = switched[j][i];
-		}
-	return switches;
+	mN = N;
+	mLogN = int(ceil(log2(N)));
+	mNumColumns = 2 * mLogN - 1;
+	
+	perm.resize(N);
+	invPerm.resize(N);
+	switched.resize(mNumColumns);
+	for (int i = 0; i < mNumColumns; ++i)
+		switched[i].resize(N / 2);
 }
 
 void Benes::DFS(int idx, int route, vector<char>& path)
@@ -49,7 +40,7 @@ void Benes::DFS(int idx, int route, vector<char>& path)
 					 pr.second ^ 1}); /// the next item is always assigned the opposite of this item,
 									  /// unless it was part of path/cycle of previous node
 
-		idx = perm[inv_perm[pr.first] ^ 1];
+		idx = perm[invPerm[pr.first] ^ 1];
 		if (path[idx] < 0)
 			st.push({idx, pr.second ^ 1});
 	}
@@ -60,57 +51,56 @@ int shuffle(int i, int n)
 	return ((i & 1) << (n - 1)) | (i >> 1);
 }
 
-// n <- number of layers in the network (initialize as int(ceil(log2(src.size()))) )
-void Benes::gen_benes_route(int n, int lvl_p, int perm_idx, const vector<int> &src,
+void Benes::genBenesRoute(int colEnd, int colStart, int permIdx, const vector<int> &src,
 														const vector<int> &dest, bool verbose)
 {
-	int levels, i, j, x, s;
+	int i, j, x, s;
 	vector<int> bottom1;
 	vector<int> top1;
-	int values = src.size();
+	int subNetSize = src.size();
 
 	/*
 	 * daca avem doar un nivel in retea
 	 */
-	if (values == 2)
+	if (subNetSize == 2)
 	{
-		if (n == 1)
-			switched[lvl_p][perm_idx] = src[0] != dest[0];
+		if (colEnd == 1)
+			switched[colStart][permIdx] = src[0] != dest[0];
 		else
-			switched[lvl_p + 1][perm_idx] = src[0] != dest[0];
+			switched[colStart + 1][permIdx] = src[0] != dest[0];
 		return;
 	}
 
-	if (values == 3)
+	if (subNetSize == 3)
 	{
 		if (src[0] == dest[0])
 		{
-			switched[lvl_p][perm_idx] = 0;
-			switched[lvl_p + 2][perm_idx] = 0;
+			switched[colStart][permIdx] = 0;
+			switched[colStart + 2][permIdx] = 0;
 			if (src[1] == dest[1])
-				switched[lvl_p + 1][perm_idx] = 0;
+				switched[colStart + 1][permIdx] = 0;
 			else
-				switched[lvl_p + 1][perm_idx] = 1;
+				switched[colStart + 1][permIdx] = 1;
 		}
 
 		if (src[0] == dest[1])
 		{
-			switched[lvl_p][perm_idx] = 0;
-			switched[lvl_p + 2][perm_idx] = 1;
+			switched[colStart][permIdx] = 0;
+			switched[colStart + 2][permIdx] = 1;
 			if (src[1] == dest[0])
-				switched[lvl_p + 1][perm_idx] = 0;
+				switched[colStart + 1][permIdx] = 0;
 			else
-				switched[lvl_p + 1][perm_idx] = 1;
+				switched[colStart + 1][permIdx] = 1;
 		}
 
 		if (src[0] == dest[2])
 		{
-			switched[lvl_p][perm_idx] = 1;
-			switched[lvl_p + 1][perm_idx] = 1;
+			switched[colStart][permIdx] = 1;
+			switched[colStart + 1][permIdx] = 1;
 			if (src[1] == dest[0])
-				switched[lvl_p + 2][perm_idx] = 0;
+				switched[colStart + 2][permIdx] = 0;
 			else
-				switched[lvl_p + 2][perm_idx] = 1;
+				switched[colStart + 2][permIdx] = 1;
 		}
 		return;
 	}
@@ -118,45 +108,47 @@ void Benes::gen_benes_route(int n, int lvl_p, int perm_idx, const vector<int> &s
 	/*
 	 * aflam dimensiunea retelei benes
 	 */
-	levels = 2 * n - 1;
+	int levels = 2 * colEnd - 1;
 
-	vector<int> bottom2(values / 2);
-	vector<int> top2(int(ceil(values * 0.5)));
+	vector<int> bottom2(subNetSize / 2);
+	vector<int> top2(int(ceil(subNetSize * 0.5)));
 
 	/*
 	 * destinatia este o permutare a intrari
 	 */
 
-	for (i = 0; i < values; ++i)
-		inv_perm[src[i]] = i;
+	for (i = 0; i < subNetSize; ++i)
+		invPerm[src[i]] = i;
 
-	for (i = 0; i < values; ++i)
-		perm[i] = inv_perm[dest[i]];
+	for (i = 0; i < subNetSize; ++i)
+		perm[i] = invPerm[dest[i]];
 
-	for (i = 0; i < values; ++i)
-		inv_perm[perm[i]] = i;
+	for (i = 0; i < subNetSize; ++i)
+		invPerm[perm[i]] = i;
 
 	/*
 	 * cautam sa vedem ce switch-uri vor fi activate in partea
 	 * inferioara a retelei
 	 */
-	vector<char> path(values, -1);
-	if (values % 2 == 1)
+	vector<char> path(subNetSize, -1);
+	if (subNetSize % 2 == 1)
 	{
-		path[values - 1] = 1;
-		path[perm[values - 1]] = 1;
-		if (perm[values - 1] != values - 1)
+		path[subNetSize - 1] = 1;
+		path[perm[subNetSize - 1]] = 1;
+		if (perm[subNetSize - 1] != subNetSize - 1)
 		{
-			int idx = perm[inv_perm[values - 1] ^ 1];
+			int idx = perm[invPerm[subNetSize - 1] ^ 1];
 			DFS(idx, 0, path);
 		}
 	}
 
-	for (i = 0; i < values; ++i)
+	for (i = 0; i < subNetSize; ++i)
+	{
 		if (path[i] < 0)
 		{
 			DFS(i, 0, path);
 		}
+	}
 
 	/*
 	 * calculam noile perechi sursa-destinatie
@@ -164,31 +156,31 @@ void Benes::gen_benes_route(int n, int lvl_p, int perm_idx, const vector<int> &s
 	 * 2 pentru partea inferioara
 	 */
 	// partea superioara
-	for (i = 0; i < values - 1; i += 2)
+	for (i = 0; i < subNetSize - 1; i += 2)
 	{
-		switched[lvl_p][perm_idx + i / 2] = path[i];
+		switched[colStart][permIdx + i / 2] = path[i];
 		for (j = 0; j < 2; ++j)
 		{
-			x = shuffle((i | j) ^ path[i], n);
-			if (x < values / 2)
+			x = shuffle((i | j) ^ path[i], colEnd);
+			if (x < subNetSize / 2)
 				bottom1.push_back(src[i | j]);
 			else
 				top1.push_back(src[i | j]);
 		}
 	}
-	if (values % 2 == 1)
+	if (subNetSize % 2 == 1)
 	{
-		top1.push_back(src[values - 1]);
+		top1.push_back(src[subNetSize - 1]);
 	}
 
 	// partea inferioara
-	for (i = 0; i < values - 1; i += 2)
+	for (i = 0; i < subNetSize - 1; i += 2)
 	{
-		s = switched[lvl_p + levels - 1][perm_idx + i / 2] = path[perm[i]];
+		s = switched[colStart + levels - 1][permIdx + i / 2] = path[perm[i]];
 		for (j = 0; j < 2; ++j)
 		{
-			x = shuffle((i | j) ^ s, n);
-			if (x < values / 2)
+			x = shuffle((i | j) ^ s, colEnd);
+			if (x < subNetSize / 2)
 				bottom2[x] = src[perm[i | j]];
 			else
 			{
@@ -197,39 +189,39 @@ void Benes::gen_benes_route(int n, int lvl_p, int perm_idx, const vector<int> &s
 		}
 	}
 
-	int idx = int(ceil(values * 0.5));
-	if (values % 2 == 1)
+	int idx = int(ceil(subNetSize * 0.5));
+	if (subNetSize % 2 == 1)
 	{
-		top2[idx - 1] = dest[values - 1];
+		top2[idx - 1] = dest[subNetSize - 1];
 	}
 
 	/*
 	 * recursivitate prin partea superioara si inferioara
 	 */
-	gen_benes_route(n - 1, lvl_p + 1, perm_idx, bottom1, bottom2);
-	gen_benes_route(n - 1, lvl_p + 1, perm_idx + values / 4, top1, top2);
+	genBenesRoute(colEnd - 1, colStart + 1, permIdx, bottom1, bottom2);
+	genBenesRoute(colEnd - 1, colStart + 1, permIdx + subNetSize / 4, top1, top2);
 }
 
-void Benes::gen_benes_eval(int n, int lvl_p, int perm_idx, vector<int> &src)
+void Benes::benesEval(int colEnd, int colStart, int permIdx, vector<int> &src)
 {
-	int levels, i, j, x, s;
+	int i, j, x, s;
 	vector<int> bottom1;
 	vector<int> top1;
-	int values = src.size();
+	int subNetSize = src.size();
 	int temp;
 
-	if (values == 2)
+	if (subNetSize == 2)
 	{
-		if (n == 1)
+		if (colEnd == 1)
 		{
-			if (switched[lvl_p][perm_idx] == 1)
+			if (switched[colStart][permIdx] == 1)
 			{
 				temp = src[0];
 				src[0] = src[1];
 				src[1] = temp;
 			}
 		}
-		else if (switched[lvl_p + 1][perm_idx] == 1)
+		else if (switched[colStart + 1][permIdx] == 1)
 		{
 			temp = src[0];
 			src[0] = src[1];
@@ -238,21 +230,21 @@ void Benes::gen_benes_eval(int n, int lvl_p, int perm_idx, vector<int> &src)
 		return;
 	}
 
-	if (values == 3)
+	if (subNetSize == 3)
 	{
-		if (switched[lvl_p][perm_idx] == 1)
+		if (switched[colStart][permIdx] == 1)
 		{
 			temp = src[0];
 			src[0] = src[1];
 			src[1] = temp;
 		}
-		if (switched[lvl_p + 1][perm_idx] == 1)
+		if (switched[colStart + 1][permIdx] == 1)
 		{
 			temp = src[1];
 			src[1] = src[2];
 			src[2] = temp;
 		}
-		if (switched[lvl_p + 2][perm_idx] == 1)
+		if (switched[colStart + 2][permIdx] == 1)
 		{
 			temp = src[0];
 			src[0] = src[1];
@@ -261,37 +253,37 @@ void Benes::gen_benes_eval(int n, int lvl_p, int perm_idx, vector<int> &src)
 		return;
 	}
 
-	levels = 2 * n - 1;
+	int levels = 2 * colEnd - 1;
 
 	// partea superioara
-	for (i = 0; i < values - 1; i += 2)
+	for (i = 0; i < subNetSize - 1; i += 2)
 	{
-		int s = switched[lvl_p][perm_idx + i / 2];
+		int s = switched[colStart][permIdx + i / 2];
 		for (j = 0; j < 2; ++j)
 		{
-			x = shuffle((i | j) ^ s, n);
-			if (x < values / 2)
+			x = shuffle((i | j) ^ s, colEnd);
+			if (x < subNetSize / 2)
 				bottom1.push_back(src[i | j]);
 			else
 				top1.push_back(src[i | j]);
 		}
 	}
-	if (values % 2 == 1)
+	if (subNetSize % 2 == 1)
 	{
-		top1.push_back(src[values - 1]);
+		top1.push_back(src[subNetSize - 1]);
 	}
 
-	gen_benes_eval(n - 1, lvl_p + 1, perm_idx, bottom1);
-	gen_benes_eval(n - 1, lvl_p + 1, perm_idx + values / 4, top1);
+	benesEval(colEnd - 1, colStart + 1, permIdx, bottom1);
+	benesEval(colEnd - 1, colStart + 1, permIdx + subNetSize / 4, top1);
 
 	// partea inferioara
-	for (i = 0; i < values - 1; i += 2)
+	for (i = 0; i < subNetSize - 1; i += 2)
 	{
-		s = switched[lvl_p + levels - 1][perm_idx + i / 2];
+		s = switched[colStart + levels - 1][permIdx + i / 2];
 		for (j = 0; j < 2; ++j)
 		{
-			x = shuffle((i | j) ^ s, n);
-			if (x < values / 2)
+			x = shuffle((i | j) ^ s, colEnd);
+			if (x < subNetSize / 2)
 				src[i | j] = bottom1[x];
 			else
 			{
@@ -300,32 +292,32 @@ void Benes::gen_benes_eval(int n, int lvl_p, int perm_idx, vector<int> &src)
 		}
 	}
 
-	int idx = int(ceil(values * 0.5));
-	if (values % 2 == 1)
+	int idx = int(ceil(subNetSize * 0.5));
+	if (subNetSize % 2 == 1)
 	{
-		src[values - 1] = top1[idx - 1];
+		src[subNetSize - 1] = top1[idx - 1];
 	}
 }
 
-void Benes::gen_benes_masked_evaluate(int n, int lvl_p, int perm_idx, vector<oc::block> &src,
-																			vector<vector<array<osuCrypto::block, 2>>> &ot_output)
+void Benes::benesMaskedEval(int colEnd, int colStart, int permIdx, vector<oc::block> &src,
+	vector<vector<array<osuCrypto::block, 2>>> &otMsgs)
 {
 	int levels, i, j, x, s;
 	vector<oc::block> bottom1;
 	vector<oc::block> top1;
-	int values = src.size();
+	int subNetSize = src.size();
 	oc::block temp, temp_int[2];
 	std::array<oc::block, 2> temp_block;
 
-	if (values == 2)
+	if (subNetSize == 2)
 	{
-		if (n == 1)
+		if (colEnd == 1)
 		{
-			temp_block = ot_output[lvl_p][perm_idx];
+			temp_block = otMsgs[colStart][permIdx];
 			memcpy(temp_int, &temp_block, sizeof(temp_int));
 			src[0] = src[0] ^ temp_int[0];
 			src[1] = src[1] ^ temp_int[1];
-			if (switched[lvl_p][perm_idx] == 1)
+			if (switched[colStart][permIdx] == 1)
 			{
 				temp = src[0];
 				src[0] = src[1];
@@ -334,11 +326,11 @@ void Benes::gen_benes_masked_evaluate(int n, int lvl_p, int perm_idx, vector<oc:
 		}
 		else
 		{
-			temp_block = ot_output[lvl_p + 1][perm_idx];
+			temp_block = otMsgs[colStart + 1][permIdx];
 			memcpy(temp_int, temp_block.data(), sizeof(temp_int));
 			src[0] = src[0] ^ temp_int[0];
 			src[1] = src[1] ^ temp_int[1];
-			if (switched[lvl_p + 1][perm_idx] == 1)
+			if (switched[colStart + 1][permIdx] == 1)
 			{
 				temp = src[0];
 				src[0] = src[1];
@@ -348,35 +340,35 @@ void Benes::gen_benes_masked_evaluate(int n, int lvl_p, int perm_idx, vector<oc:
 		return;
 	}
 
-	if (values == 3)
+	if (subNetSize == 3)
 	{
-		temp_block = ot_output[lvl_p][perm_idx];
+		temp_block = otMsgs[colStart][permIdx];
 		memcpy(temp_int, temp_block.data(), sizeof(temp_int));
 		src[0] = src[0] ^ temp_int[0];
 		src[1] = src[1] ^ temp_int[1];
-		if (switched[lvl_p][perm_idx] == 1)
+		if (switched[colStart][permIdx] == 1)
 		{
 			temp = src[0];
 			src[0] = src[1];
 			src[1] = temp;
 		}
 
-		temp_block = ot_output[lvl_p + 1][perm_idx];
+		temp_block = otMsgs[colStart + 1][permIdx];
 		memcpy(temp_int, temp_block.data(), sizeof(temp_int));
 		src[1] = src[1] ^ temp_int[0];
 		src[2] = src[2] ^ temp_int[1];
-		if (switched[lvl_p + 1][perm_idx] == 1)
+		if (switched[colStart + 1][permIdx] == 1)
 		{
 			temp = src[1];
 			src[1] = src[2];
 			src[2] = temp;
 		}
 
-		temp_block = ot_output[lvl_p + 2][perm_idx];
+		temp_block = otMsgs[colStart + 2][permIdx];
 		memcpy(temp_int, temp_block.data(), sizeof(temp_int));
 		src[0] = src[0] ^ temp_int[0];
 		src[1] = src[1] ^ temp_int[1];
-		if (switched[lvl_p + 2][perm_idx] == 1)
+		if (switched[colStart + 2][permIdx] == 1)
 		{
 			temp = src[0];
 			src[0] = src[1];
@@ -386,14 +378,14 @@ void Benes::gen_benes_masked_evaluate(int n, int lvl_p, int perm_idx, vector<oc:
 		return;
 	}
 
-	levels = 2 * n - 1;
+	levels = 2 * colEnd - 1;
 
 	// partea superioara
-	for (i = 0; i < values - 1; i += 2)
+	for (i = 0; i < subNetSize - 1; i += 2)
 	{
-		int s = switched[lvl_p][perm_idx + i / 2];
+		int s = switched[colStart][permIdx + i / 2];
 
-		temp_block = ot_output[lvl_p][perm_idx + i / 2];
+		temp_block = otMsgs[colStart][permIdx + i / 2];
 		memcpy(temp_int, temp_block.data(), sizeof(temp_int));
 
 		src[i] = src[i] ^ temp_int[0];
@@ -401,8 +393,8 @@ void Benes::gen_benes_masked_evaluate(int n, int lvl_p, int perm_idx, vector<oc:
 
 		for (j = 0; j < 2; ++j)
 		{
-			x = shuffle((i | j) ^ s, n);
-			if (x < values / 2)
+			x = shuffle((i | j) ^ s, colEnd);
+			if (x < subNetSize / 2)
 			{
 				bottom1.push_back(src[i | j]);
 			}
@@ -412,22 +404,22 @@ void Benes::gen_benes_masked_evaluate(int n, int lvl_p, int perm_idx, vector<oc:
 			}
 		}
 	}
-	if (values % 2 == 1)
+	if (subNetSize % 2 == 1)
 	{
-		top1.push_back(src[values - 1]);
+		top1.push_back(src[subNetSize - 1]);
 	}
 
-	gen_benes_masked_evaluate(n - 1, lvl_p + 1, perm_idx, bottom1, ot_output);
-	gen_benes_masked_evaluate(n - 1, lvl_p + 1, perm_idx + values / 4, top1, ot_output);
+	benesMaskedEval(colEnd - 1, colStart + 1, permIdx, bottom1, otMsgs);
+	benesMaskedEval(colEnd - 1, colStart + 1, permIdx + subNetSize / 4, top1, otMsgs);
 
-	for (i = 0; i < values - 1; i += 2)
+	for (i = 0; i < subNetSize - 1; i += 2)
 	{
-		s = switched[lvl_p + levels - 1][perm_idx + i / 2];
+		s = switched[colStart + levels - 1][permIdx + i / 2];
 
 		for (j = 0; j < 2; ++j)
 		{
-			x = shuffle((i | j) ^ s, n);
-			if (x < values / 2)
+			x = shuffle((i | j) ^ s, colEnd);
+			if (x < subNetSize / 2)
 				src[i | j] = bottom1[x];
 			else
 			{
@@ -435,28 +427,26 @@ void Benes::gen_benes_masked_evaluate(int n, int lvl_p, int perm_idx, vector<oc:
 			}
 		}
 
-		temp_block = ot_output[lvl_p + levels - 1][perm_idx + i / 2];
+		temp_block = otMsgs[colStart + levels - 1][permIdx + i / 2];
 		memcpy(temp_int, temp_block.data(), sizeof(temp_int));
 		src[i] = src[i] ^ temp_int[s];
 		src[i ^ 1] = src[i ^ 1] ^ temp_int[1 - s];
 	}
 
-	int idx = int(ceil(values * 0.5));
-	if (values % 2 == 1)
+	int idx = int(ceil(subNetSize * 0.5));
+	if (subNetSize % 2 == 1)
 	{
-		src[values - 1] = top1[idx - 1];
+		src[subNetSize - 1] = top1[idx - 1];
 	}
 }
 
-osuCrypto::BitVector Benes::return_gen_benes_switches(int values)
+osuCrypto::BitVector Benes::getSwitches()
 {
-	int N = int(ceil(log2(values)));
-	int levels = 2 * N - 1;
-	osuCrypto::BitVector switches(levels * (values / 2));
-	for (int j = 0; j < levels; ++j)
-		for (int i = 0; i < values / 2; ++i)
+	osuCrypto::BitVector switches(mN * mNumColumns / 2);
+	for (int j = 0; j < mNumColumns; ++j)
+		for (int i = 0; i < mN / 2; ++i)
 		{
-			switches[j * (values / 2) + i] = (switched[j][i]);
+			switches[(mN * j) / 2 + i] = switched[j][i];
 		}
 	return switches;
 }
