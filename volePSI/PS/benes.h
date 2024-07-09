@@ -1,4 +1,4 @@
-//#pragma once
+// #pragma once
 
 #include <vector>
 
@@ -9,25 +9,38 @@ class Benes
 	int mN;
 	int mNumColumns;
 	int mLogN;
-	
-	std::vector<int> perm;
-	std::vector<int> invPerm;
-	std::vector<std::vector<int>> switched;
 
-	void DFS(int idx, int route, std::vector<char>& path);
+	std::vector<std::vector<char>> mSwitches;
+
+	std::vector<int> mPerm;
+	std::vector<int> mInvPerm;
+
+	std::vector<int> permInner;
+	std::vector<int> invPermInner;
+
+	void DFS(int idx, int route, std::vector<char> &path);
+
+	void genBenesRouteInner(int depth, int permIdx, const std::vector<int> &src,
+													const std::vector<int> &dest);
 
 public:
 
-	void initialize(int N);
+	void initialize(int N, std::vector<int> perm = std::vector<int>());
 
-	void genBenesRoute(int colEnd, int colStart, int permIdx, const std::vector<int>& src,
-		const std::vector<int>& dest, bool verbose = true);
+	void genBenesRoute();
 
-	void benesEval(int colEnd, int colStart, int permIdx, std::vector<int>& src);
+	void benesEval(std::vector<int> &vec, int depth = 0, int permIdx = 0);
 
-	void benesMaskedEval(int colEnd, int colStart, int permIdx, std::vector<oc::block>& src,
-		std::vector<std::vector<std::array<osuCrypto::block, 2>>>& otMsgs);
+	void benesMaskedEval(std::vector<oc::block> &src,
+											std::vector<std::vector<std::array<oc::block, 2>>> &otMsgs,
+											int depth = 0, int permIdx = 0);	
 
-	osuCrypto::BitVector getSwitches();
+	void benesMaskedEval(oc::BitVector &src,
+											std::vector<std::vector<std::array<bool, 2>>> &otMsgs,
+											int depth = 0, int permIdx = 0);
 
+
+	oc::BitVector getSwitchesAsBitVec();
+
+	std::vector<int> getPerm() {return mPerm;};
 };

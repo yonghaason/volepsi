@@ -4,5 +4,5 @@
 #include <volePSI/config.h>
 
 void OText_Test(const oc::CLP& cmd);
-void OSN_Test(const oc::CLP& cmd);
-// void Benes_snark_AS_Test(const oc::CLP& cmd);
+void PS_blk_Test(const oc::CLP& cmd);
+void PS_bit_Test(const oc::CLP& cmd);

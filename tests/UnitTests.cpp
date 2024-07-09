@@ -13,7 +13,7 @@
 #include "volePSI/GMW/Circuit.h"
 #include "FileBase_Tests.h"
 #include "Benes_Tests.h"
-#include "OSN_Tests.h"
+#include "PS_Tests.h"
 
 namespace volePSI_Tests
 {
@@ -38,6 +38,8 @@ namespace volePSI_Tests
 
         t.add("Benes_Test                  ", Benes_Test);
         t.add("OText_Test                  ", OText_Test);
+        t.add("PS_blk_Test                 ", PS_blk_Test);
+        t.add("PS_bit_Test                 ", PS_bit_Test);
         
 #ifdef VOLE_PSI_ENABLE_GMW
         t.add("SilentTripleGen_test        ", SilentTripleGen_test);
