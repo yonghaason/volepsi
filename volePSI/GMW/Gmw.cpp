@@ -37,11 +37,6 @@ namespace volePSI
 
         mNumOts = mWords.cols() * 128 * mCir.mNonlinearGateCount * 2;
 
-        std::cout << "mNumOts: " << mNumOts << std::endl;
-        std::cout << "mCir.mNonlinearGateCount: " << mCir.mNonlinearGateCount << std::endl;
-        std::cout << "mWords.cols(): " << mWords.cols() << std::endl;
-        std::cout << "mCir.mWireCount: " << mCir.mWireCount << std::endl;
-        std::cout << "mN: " << mN << std::endl;
 
 
         mPrint = mCir.mPrints.begin();
@@ -162,7 +157,8 @@ namespace volePSI
 
         if (mA.size() == 0)
         {
-            MC_AWAIT(generateTriple(1 << 20, 2, chl));
+            // MC_AWAIT(generateTriple(1 << 20, 2, chl));
+            MC_AWAIT(generateTriple(1 << 24, 2, chl));
         }
 
         if (mO.mDebug)

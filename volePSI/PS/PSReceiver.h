@@ -4,7 +4,6 @@
 #include "volePSI/Paxos.h"
 #include "cryptoTools/Network/IOService.h"
 #include "cryptoTools/Network/Session.h"
-#include <libOTe/TwoChooseOne/Silent/SilentOtExtSender.h>
 
 namespace volePSI
 {
@@ -13,8 +12,8 @@ namespace volePSI
 		size_t mN;
 		size_t mLogN;
 		size_t mNumBenesColumns;
-		size_t mNumOts;
-		size_t mNumThreads;
+		size_t mNumSwitches;
+		size_t mNumThreads;		
 
 		template <typename ValueType>
 		void prepareCorrection(u64 depth, u64 permIdx,
@@ -30,9 +29,7 @@ namespace volePSI
 
 		Proto genBenes(std::vector<std::array<block, 2>> &retMasks, oc::PRNG& prng, Socket &chl);
 		// TODO: Remove dumb duplications (with a clever use of template?).  
-		Proto genBenes(std::vector<oc::BitVector> &retMasks, oc::PRNG& prng, Socket &chl);
-		
-		oc::SilentOtExtSender mOtSender;
+		Proto genBenes(std::vector<oc::BitVector> &retMasks, oc::PRNG& prng, Socket &chl);		
 
 	public:
 

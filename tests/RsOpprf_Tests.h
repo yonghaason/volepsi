@@ -13,9 +13,11 @@
 #ifdef VOLE_PSI_ENABLE_OPPRF
 
 
-void RsOpprf_eval_blk_test(const oc::CLP&);
-void RsOpprf_eval_blk_mtx_test(const oc::CLP&);
+void RsOpprf_eval_blk_test(const oc::CLP& cmd);
+void RsOpprf_eval_blk_mtx_test(const oc::CLP& cmd);
 
-void RsOpprf_eval_u8_test(const oc::CLP&);
-void RsOpprf_eval_u8_mtx_test(const oc::CLP&);
+void RsOpprf_eval_u8_test(const oc::CLP& cmd);
+void RsOpprf_eval_u8_mtx_test(const oc::CLP& cmd);
+
+void RsOpprf_partial_test(const oc::CLP& cmd);
 #endif

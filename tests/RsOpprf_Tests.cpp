@@ -11,7 +11,7 @@ using namespace volePSI;
 using namespace oc;
 
 
-void RsOpprf_eval_blk_test(const CLP&)
+void RsOpprf_eval_blk_test(const CLP& cmd)
 {
     RsOpprfSender sender;
     RsOpprfReceiver recver;
@@ -19,9 +19,13 @@ void RsOpprf_eval_blk_test(const CLP&)
     auto sockets = cp::LocalAsyncSocket::makePair();
 
 
-    u64 n = 4000;
-    PRNG prng0(block(0, 0));
-    PRNG prng1(block(0, 1));
+    u64 n = cmd.getOr("n", 4000);
+    std::random_device rd;
+    std::default_random_engine gen(rd());
+    std::uniform_int_distribution<u64> dis;
+
+    PRNG prng0(block(dis(gen), dis(gen)));
+    PRNG prng1(block(dis(gen), dis(gen)));
 
     std::vector<block> vals(n), out(n), recvOut(n);
 
@@ -62,7 +66,7 @@ std::string hex(const Vec& v)
     return ss.str();
 }
 
-void RsOpprf_eval_blk_mtx_test(const CLP&)
+void RsOpprf_eval_blk_mtx_test(const CLP& cmd)
 {
     RsOpprfSender sender;
     RsOpprfReceiver recver;
@@ -70,10 +74,14 @@ void RsOpprf_eval_blk_mtx_test(const CLP&)
     auto sockets = cp::LocalAsyncSocket::makePair();
 
 
-    u64 n = 4000;
+    u64 n = cmd.getOr("n", 4000);
     u64 m = 7;
-    PRNG prng0(block(0, 0));
-    PRNG prng1(block(0, 1));
+    std::random_device rd;
+    std::default_random_engine gen(rd());
+    std::uniform_int_distribution<u64> dis;
+
+    PRNG prng0(block(dis(gen), dis(gen)));
+    PRNG prng1(block(dis(gen), dis(gen)));
 
     std::vector<block> vals(n);
     oc::Matrix<block> out(n, m), out2(n, m), recvOut(n, m);
@@ -108,16 +116,20 @@ void RsOpprf_eval_blk_mtx_test(const CLP&)
         throw RTE_LOC;
 }
 
-void RsOpprf_eval_u8_test(const CLP&)
+void RsOpprf_eval_u8_test(const CLP& cmd)
 {
     RsOpprfSender sender;
     RsOpprfReceiver recver;
 
     auto sockets = cp::LocalAsyncSocket::makePair();
 
-    u64 n = 4000;
-    PRNG prng0(block(0, 0));
-    PRNG prng1(block(0, 1));
+    u64 n = cmd.getOr("n", 4000);
+    std::random_device rd;
+    std::default_random_engine gen(rd());
+    std::uniform_int_distribution<u64> dis;
+
+    PRNG prng0(block(dis(gen), dis(gen)));
+    PRNG prng1(block(dis(gen), dis(gen)));
 
     std::vector<block> vals(n);
     std::vector<u8> out(n), recvOut(n);
@@ -150,17 +162,21 @@ void RsOpprf_eval_u8_test(const CLP&)
 
 
 
-void RsOpprf_eval_u8_mtx_test(const CLP&)
+void RsOpprf_eval_u8_mtx_test(const CLP& cmd)
 {
     RsOpprfSender sender;
     RsOpprfReceiver recver;
 
     auto sockets = cp::LocalAsyncSocket::makePair();
 
-    u64 n = 4000;
+    u64 n = cmd.getOr("n", 4000);
     u64 m = 7;
-    PRNG prng0(block(0, 0));
-    PRNG prng1(block(0, 1));
+    std::random_device rd;
+    std::default_random_engine gen(rd());
+    std::uniform_int_distribution<u64> dis;
+
+    PRNG prng0(block(dis(gen), dis(gen)));
+    PRNG prng1(block(dis(gen), dis(gen)));
 
     std::vector<block> vals(n);
     oc::Matrix<u8> out(n, m), out2(n, m), recvOut(n, m);
@@ -189,6 +205,71 @@ void RsOpprf_eval_u8_mtx_test(const CLP&)
                 break;
 
             ++count;
+        }
+    }
+    if (count)
+        throw RTE_LOC;
+}
+
+void RsOpprf_partial_test(const CLP& cmd)
+{
+    RsOpprfSender sender;
+    RsOpprfReceiver recver;
+
+    auto sockets = cp::LocalAsyncSocket::makePair();
+
+    u64 nReceiver = cmd.getOr("n", 100);
+    u64 nSender = cmd.getOr("ns", 0);
+    if (nSender == 0) nSender = nReceiver;
+    u64 m = cmd.getOr("m", 7);
+    std::random_device rd;
+    std::default_random_engine gen(rd());
+    std::uniform_int_distribution<u64> dis;
+
+    std::cout << "input sizes: " << nSender << ", " << nReceiver << std::endl;
+
+    PRNG prng0(block(dis(gen), dis(gen)));
+    PRNG prng1(block(dis(gen), dis(gen)));
+
+    std::vector<block> senderKey(nSender);
+    std::vector<block> recvKey(nReceiver);
+    oc::Matrix<u8> senderVal(nSender, m), recvOut(nReceiver, m);
+
+    prng0.get(senderKey.data(), nSender);
+    prng0.get(recvKey.data(), nReceiver);
+    prng0.get(senderVal.data(), nSender*m);
+    
+    std::set<u64> exp;
+    for (u64 i = 0; i < nReceiver; ++i)
+    {
+        if (prng0.getBit())
+        {
+            recvKey[i] = senderKey[(i + 312) % (nSender)];
+            exp.insert(i);
+        }
+    }
+
+    auto p0 = sender.send(nReceiver, senderKey, senderVal, prng0, 1, sockets[0]);
+    auto p1 = recver.receive(nSender, recvKey, recvOut, prng1, 1, sockets[1]);
+
+    eval(p0, p1);
+    
+
+    u64 count = 0;
+    for (u64 i = 0; i < nReceiver; ++i)
+    {
+        if (exp.find(i) != exp.end()) {
+            auto v = senderVal[(i + 312) % (nSender)];
+            auto c = memcmp(recvOut[i].data(), v.data(), m * sizeof(u8)) != 0;
+            if (c)
+            {
+                if (count < 10)
+                    std::cout << i << " " << hex(recvOut[i]) << " " << hex(v) << std::endl;
+                else
+                    break;
+
+                ++count;
+            }
         }
     }
     if (count)

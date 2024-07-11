@@ -2621,7 +2621,7 @@ namespace volePSI
 			implParSolve<u16>(inputs, V, P, prng, numThreads, h);
 		else if (bitLength <= 32)
 			implParSolve<u32>(inputs, V, P, prng, numThreads, h);
-		else
+		else 
 			implParSolve<u64>(inputs, V, P, prng, numThreads, h);
 
 
@@ -2733,7 +2733,6 @@ namespace volePSI
 			auto begin = (inputs_.size() * thrdIdx) / numThreads;
 			auto end = (inputs_.size() * (thrdIdx + 1)) / numThreads;
 			auto inputs = inputs_.subspan(begin, end - begin);
-
 
 			// hash all the inputs in my range [begin, end) into their bin.
 			// Each thread will have its own set of bins. ie a total of numThreads * numBins

@@ -234,6 +234,7 @@ namespace volePSI
         // }
     }
 
+    // in paxos, numBins = 1 << 14, numBalls = number of items, statSecParam = 40 + std::log2(mNumBins)
     u64 SimpleIndex::get_bin_size(u64 numBins, u64 numBalls, u64 statSecParam, bool approx)
     {
         if (numBins < 2)
@@ -264,10 +265,10 @@ namespace volePSI
             // Then evalate the surface at out bin,ball coordinate.
             if (numBinsHgh < sizes.size() && numBallsHgh < sizes[numBinsHgh].size())
             {
-                auto a0 = (1 - diffBin) * sizes[numBinsLow][numBallsLow] + (diffBin) * sizes[numBinsLow][numBallsHgh];
-                auto a1 = (1 - diffBin) * sizes[numBinsHgh][numBallsLow] + (diffBin) * sizes[numBinsHgh][numBallsHgh];
+                auto a0 = (1 - diffBall) * sizes[numBinsLow][numBallsLow] + (diffBall) * sizes[numBinsLow][numBallsHgh];
+                auto a1 = (1 - diffBall) * sizes[numBinsHgh][numBallsLow] + (diffBall) * sizes[numBinsHgh][numBallsHgh];
 
-                auto b0 = (1 - diffBall) * a0 + (diffBall) * a1;
+                auto b0 = (1 - diffBin) * a0 + (diffBin) * a1;
 
                 auto B = std::ceil(std::pow(2, b0));
 

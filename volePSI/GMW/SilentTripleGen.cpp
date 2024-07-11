@@ -282,7 +282,6 @@ namespace volePSI
         }
         else
         {
-
             mDVec.resize(mN / 128);
             mCBitVec.resize(0);
             mCBitVec.reserve(mN);
@@ -369,7 +368,6 @@ namespace volePSI
         //std::cout << " expand exit " << (u64)this << std::endl;
 
     }
-
 
     Proto generateBase(
         RequiredBase b,

@@ -51,14 +51,6 @@ namespace volePSI
 	}
 
 
-	struct DD
-	{
-		~DD()
-		{
-			std::cout << "DD" << std::endl;
-		}
-	};
-
 	Proto RsOpprfSender::send(u64 recverSize, span<const block> X, MatrixView<u8> val, PRNG& prng, u64 numThreads, Socket& chl)
 	{
 		MC_BEGIN(Proto,this, recverSize, X, val, &prng, numThreads, &chl,
@@ -138,7 +130,7 @@ namespace volePSI
 		diffPtr.reset();
 
 		setTimePoint("RsOpprfSender::send paxos solve");
-
+		
 		MC_AWAIT(chl.send(coproto::copy(mP)));
 
 		setTimePoint("RsOpprfSender::send end");
@@ -203,15 +195,16 @@ namespace volePSI
 		n = outputs.rows();
 		m = outputs.cols();
 
-
 	 	MC_AWAIT(chl.recv(paxos.mSeed));
 		type = m % sizeof(block) ? PaxosParam::Binary : PaxosParam::GF128;
+		setTimePoint("RsOpprfReceiver::Initialize baxos");
 		paxos.init(senderSize, 1 << 14, 3, 40, type, paxos.mSeed);
 
 		if (mTimer)
 			mOprfReceiver.setTimer(*mTimer);
 
-		if (outputs.cols() >= sizeof(block))
+		if (0)
+		// if (outputs.cols() >= sizeof(block))
 		{
 			// reuse memory. extra logic to make sure oprfOutput is properly aligned.
 			auto ptr = outputs.data() + outputs.size();
@@ -234,11 +227,10 @@ namespace volePSI
 
 		MC_AWAIT(mOprfReceiver.receive(values, oprfOutput, prng, chl, numThreads));
 
-
 		p.resize(paxos.size(), m, oc::AllocType::Uninitialized);
 		MC_AWAIT(chl.recv(p));
 		setTimePoint("RsOpprfReceiver::receive recv");
-
+		
 		if (m == sizeof(block))
 		{
 			auto v = span<block>((block*)values.data(), n);

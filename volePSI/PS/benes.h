@@ -43,4 +43,5 @@ public:
 	oc::BitVector getSwitchesAsBitVec();
 
 	std::vector<int> getPerm() {return mPerm;};
+	std::vector<int> getInvPerm() {return mInvPerm;};
 };

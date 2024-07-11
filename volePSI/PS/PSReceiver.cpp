@@ -1,4 +1,5 @@
 #include "PSReceiver.h"
+#include <libOTe/TwoChooseOne/Silent/SilentOtExtSender.h>
 
 namespace volePSI
 {
@@ -8,30 +9,32 @@ namespace volePSI
 		this->mLogN = ceil(log2(N));
 		this->mNumBenesColumns = 2 * mLogN - 1;
 		this->mNumThreads = numThreads;
-		mNumOts = mNumBenesColumns * mN / 2;
+		mNumSwitches = mNumBenesColumns * (mN / 2);
+		setTimePoint("PSReceiver::initialize");
 	}
 
 	Proto PSReceiver::genOT(oc::PRNG &prng, std::vector<std::array<block, 2>> &rotSendMsgs, Socket &chl)
 	{
-		MC_BEGIN(Proto, this, &prng, &rotSendMsgs, &chl);
-		mOtSender.configure(mNumOts, 2, mNumThreads);
-		MC_AWAIT(mOtSender.genSilentBaseOts(prng, chl));
-		rotSendMsgs.resize(mNumOts);
-		MC_AWAIT(mOtSender.silentSend(rotSendMsgs, prng, chl));
+		MC_BEGIN(Proto, this, &prng, &rotSendMsgs, &chl,
+				 otSender = std::make_unique<oc::SilentOtExtSender>());
+		otSender->configure(mNumSwitches, 2, mNumThreads);
+		MC_AWAIT(otSender->genSilentBaseOts(prng, chl));
+		rotSendMsgs.resize(mNumSwitches);
+		MC_AWAIT(otSender->silentSend(rotSendMsgs, prng, chl));
 		MC_END();
 	}
 
 	Proto PSReceiver::genBenes(std::vector<std::array<block, 2>> &retMasks, oc::PRNG &prng, Socket &chl)
 	{
 		MC_BEGIN(Proto, this, &retMasks, &prng, &chl,
-						 masks = std::vector<block>{},
-						 rotSendMsgs = std::vector<std::array<block, 2>>{},
-						 sotMsgs = std::vector<std::array<std::array<block, 2>, 2>>{},
-						 bitCorrection = oc::BitVector{},
-						 corrections = std::vector<std::array<block, 2>>{},
-						 temp = block{},
-						 i = u64{},
-						 aes = AES{oc::ZeroBlock});
+				 masks = std::vector<block>{},
+				 rotSendMsgs = std::vector<std::array<block, 2>>{},
+				 sotMsgs = std::vector<std::array<std::array<block, 2>, 2>>{},
+				 bitCorrection = oc::BitVector{},
+				 corrections = std::vector<std::array<block, 2>>{},
+				 temp = block{},
+				 i = u64{},
+				 aes = AES{oc::ZeroBlock});
 
 		masks.resize(mN);
 		retMasks.resize(mN);
@@ -43,11 +46,14 @@ namespace volePSI
 			retMasks[i][0] = temp;
 		}
 
-		sotMsgs.resize(mNumOts);
+		sotMsgs.resize(mNumSwitches);
 		MC_AWAIT(genOT(prng, rotSendMsgs, chl)); // sample random ot blocks
 
-		bitCorrection.resize(mNumOts);
+		setTimePoint("PSReceiver::receive-OT");
+
+		bitCorrection.resize(mNumSwitches);
 		MC_AWAIT(chl.recv(bitCorrection));
+		setTimePoint("PSReceiver::receive-bitcorrection");
 
 		for (i = 0; i < rotSendMsgs.size(); i++)
 		{
@@ -65,9 +71,11 @@ namespace volePSI
 			sotMsgs[i][1] = {rotSendMsgs[i][1], aes.ecbEncBlock(rotSendMsgs[i][1])};
 		}
 
-		corrections.resize(mNumOts);
+		corrections.resize(mNumSwitches);
 		prepareCorrection(0, 0, masks, sotMsgs, corrections);
 		MC_AWAIT(chl.send(corrections));
+		setTimePoint("PSReceiver::compute-correction");
+
 		for (i = 0; i < mN; ++i)
 		{
 			retMasks[i][1] = masks[i];
@@ -78,9 +86,9 @@ namespace volePSI
 	Proto PSReceiver::runPermAndShare(span<const block> inputs, std::vector<block> &outputs, oc::PRNG &prng, Socket &chl)
 	{
 		MC_BEGIN(Proto, this, inputs, &outputs, &prng, &chl,
-						 retMasks = std::vector<std::array<block, 2>>{},
-						 benesInputs = std::vector<block>{},
-						 i = u64{});
+				 retMasks = std::vector<std::array<block, 2>>{},
+				 benesInputs = std::vector<block>{},
+				 i = u64{});
 
 		MC_AWAIT(genBenes(retMasks, prng, chl));
 
@@ -97,9 +105,9 @@ namespace volePSI
 
 	template <typename T>
 	void PSReceiver::prepareCorrection(
-			u64 depth, u64 permIdx, std::vector<T> &src,
-			std::vector<std::array<std::array<T, 2>, 2>> &otMsgs,
-			std::vector<std::array<T, 2>> &corrections)
+		u64 depth, u64 permIdx, std::vector<T> &src,
+		std::vector<std::array<std::array<T, 2>, 2>> &otMsgs,
+		std::vector<std::array<T, 2>> &corrections)
 	{
 		// ot message M0 = m0 ^ w0 || m1 ^ w1
 		//  for each switch: top wire m0 w0 - bottom wires m1, w1
@@ -281,18 +289,17 @@ namespace volePSI
 		}
 	}
 
-	
 	Proto PSReceiver::genBenes(std::vector<oc::BitVector> &retMasks, oc::PRNG &prng, Socket &chl)
 	{
 		MC_BEGIN(Proto, this, &retMasks, &prng, &chl,
-						 masks = oc::BitVector{},
-						 rotSendMsgs = std::vector<std::array<block, 2>>{},
-						 sotMsgs = std::vector<std::array<std::array<bool, 2>, 2>>{},
-						 bitCorrection = oc::BitVector{},
-						 corrections = std::vector<std::array<bool, 2>>{},
-						 temp = block{},
-						 i = u64{},
-						 aes = AES{oc::ZeroBlock});
+				 masks = oc::BitVector{},
+				 rotSendMsgs = std::vector<std::array<block, 2>>{},
+				 sotMsgs = std::vector<std::array<std::array<bool, 2>, 2>>{},
+				 bitCorrection = oc::BitVector{},
+				 corrections = std::vector<std::array<bool, 2>>{},
+				 temp = block{},
+				 i = u64{},
+				 aes = AES{oc::ZeroBlock});
 
 		masks.resize(mN);
 		masks.randomize(prng);
@@ -300,11 +307,14 @@ namespace volePSI
 		retMasks.resize(2);
 		retMasks[0] = masks;
 
-		sotMsgs.resize(mNumOts);
+		sotMsgs.resize(mNumSwitches);
 		MC_AWAIT(genOT(prng, rotSendMsgs, chl)); // sample random ot blocks
 
-		bitCorrection.resize(mNumOts);
+		setTimePoint("PSReceiver::receive-OT");
+
+		bitCorrection.resize(mNumSwitches);
 		MC_AWAIT(chl.recv(bitCorrection));
+		setTimePoint("PSReceiver::receive-bitcorrection");
 
 		for (i = 0; i < rotSendMsgs.size(); i++)
 		{
@@ -323,8 +333,9 @@ namespace volePSI
 			sotMsgs[i][1] = {rotSendMsgs[i][1].mData[0] & 1, aes.ecbEncBlock(rotSendMsgs[i][1]).mData[0] & 1};
 		}
 
-		corrections.resize(mNumOts);
-		prepareCorrection(0, 0, masks, sotMsgs, corrections);		
+		corrections.resize(mNumSwitches);
+		prepareCorrection(0, 0, masks, sotMsgs, corrections);
+		setTimePoint("PSReceiver::compute-correction");
 		MC_AWAIT(chl.send(corrections));
 		retMasks[1] = masks;
 		MC_END();
@@ -333,22 +344,23 @@ namespace volePSI
 	Proto PSReceiver::runPermAndShare(const oc::BitVector &inputs, oc::BitVector &outputs, oc::PRNG &prng, Socket &chl)
 	{
 		MC_BEGIN(Proto, this, inputs, &outputs, &prng, &chl,
-						 retMasks = std::vector<oc::BitVector>{},
-						 benesInputs = oc::BitVector{},
-						 i = u64{});
+				 retMasks = std::vector<oc::BitVector>{},
+				 benesInputs = oc::BitVector{},
+				 i = u64{});
 
 		MC_AWAIT(genBenes(retMasks, prng, chl));
+
 		benesInputs = retMasks[0] ^ inputs;
 		MC_AWAIT(chl.send(benesInputs));
+
 		outputs = retMasks[1];
 		MC_END();
 	}
 
-	
 	void PSReceiver::prepareCorrection(
-			u64 depth, u64 permIdx, oc::BitVector &src,
-			std::vector<std::array<std::array<bool, 2>, 2>> &otMsgs,
-			std::vector<std::array<bool, 2>> &corrections)
+		u64 depth, u64 permIdx, oc::BitVector &src,
+		std::vector<std::array<std::array<bool, 2>, 2>> &otMsgs,
+		std::vector<std::array<bool, 2>> &corrections)
 	{
 		// ot message M0 = m0 ^ w0 || m1 ^ w1
 		//  for each switch: top wire m0 w0 - bottom wires m1, w1

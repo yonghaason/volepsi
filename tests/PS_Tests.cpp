@@ -3,27 +3,28 @@
 #include "volePSI/PS/PSReceiver.h"
 #include "volePSI/PS/PSSender.h"
 
-#include "cryptoTools/Network/IOService.h"
+#include "cryptoTools/Network/Channel.h"
 #include "cryptoTools/Network/Session.h"
-#include "cryptoTools/Circuit/BetaLibrary.h"
+#include "cryptoTools/Network/IOService.h"
 #include "Common.h"
 #include "coproto/Socket/LocalAsyncSock.h"
 
 using namespace volePSI;
 using namespace oc;
+using namespace coproto;
 
-void OText_Test(const oc::CLP &cmd)
+void OText_test(const oc::CLP &cmd)
 {
 	PSReceiver recver;
 	PSSender sender;
 
-	auto sockets = cp::LocalAsyncSocket::makePair();
+	auto sockets = LocalAsyncSocket::makePair();
 
 	u64 n = cmd.getOr("n", 100);
-	u64 t = cmd.getOr("t", 1);
+	u64 nt = cmd.getOr("nt", 1);
 
-	recver.init(n, t);
-	sender.init(n, t);
+	recver.init(n, nt);
+	sender.init(n, nt);
 	
 	PRNG prng0(block(0, 0));
 	PRNG prng1(block(0, 1));
@@ -44,12 +45,12 @@ void OText_Test(const oc::CLP &cmd)
 	}		
 }
 
-void PS_blk_Test(const oc::CLP &cmd)
+void PS_blk_test(const oc::CLP &cmd)
 {
 	PSReceiver recver;
 	PSSender sender;
 
-	auto sockets = cp::LocalAsyncSocket::makePair();
+	auto sockets = LocalAsyncSocket::makePair();
 
 	u64 n = cmd.getOr("n", 100);
 	u64 t = cmd.getOr("t", 1);
@@ -83,12 +84,12 @@ void PS_blk_Test(const oc::CLP &cmd)
 	}		
 }
 
-void PS_bit_Test(const oc::CLP &cmd)
+void PS_bit_test(const oc::CLP &cmd)
 {
 	PSReceiver recver;
 	PSSender sender;
 
-	auto sockets = cp::LocalAsyncSocket::makePair();
+	auto sockets = LocalAsyncSocket::makePair();
 
 	u64 n = cmd.getOr("n", 100);
 	u64 t = cmd.getOr("t", 1);

@@ -10,6 +10,7 @@ set(SRCS
     "PS/benes.cpp"
     "PS/PSReceiver.cpp"
     "PS/PSSender.cpp"
+    "Cpso.cpp"
     )
 
 if(VOLE_PSI_ENABLE_GMW)

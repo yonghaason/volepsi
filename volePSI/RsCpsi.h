@@ -87,6 +87,8 @@ namespace volePSI
         // The output is written to s.
         Proto send(span<block> Y, oc::MatrixView<u8> values, Sharing& s, Socket& chl);
 
+        Proto sendNew(span<block> Y, oc::MatrixView<u8> values, Sharing& s, Socket& chl);
+
     };
 
 
@@ -113,6 +115,7 @@ namespace volePSI
         // The output is written to s.
         Proto receive(span<block> X, Sharing& s, Socket& chl);
 
+        Proto receiveNew(span<block> X, Sharing& s, Socket& chl);
     };
 
 }

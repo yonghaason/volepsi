@@ -291,7 +291,7 @@ namespace volePSI
         );
 
         setTimePoint("RsOprfReceiver::receive-begin");
-
+        
         if (values.size() != outputs.size())
             throw RTE_LOC;
 
@@ -338,7 +338,7 @@ namespace volePSI
         c = mVoleRecver.mC;
 
         setTimePoint("RsOprfReceiver::receive-vole");
-
+        
 
         if (mMalicious)
         {
@@ -415,14 +415,14 @@ namespace volePSI
                 }
 
                 setTimePoint("RsOprfReceiver::receive-xor");
-
+                
                 if (p.size() != subP.size())
                     MC_AWAIT(chl.send(std::move(subP)));
                 else
                     MC_AWAIT(chl.send(std::move(p)));
 
                 setTimePoint("RsOprfReceiver::receive-send");
-
+                
                 ++ii;
             }
 
@@ -431,7 +431,7 @@ namespace volePSI
         paxos.decode<block>(values, outputs, a, numThreads);
 
         setTimePoint("RsOprfReceiver::receive-decode");
-
+        
         if (mMalicious)
         {
             MC_AWAIT(chl.recv(ws));
@@ -495,6 +495,7 @@ namespace volePSI
         }
 
         setTimePoint("RsOprfReceiver::receive-hash");
+        
         MC_END();
     }
 

@@ -11,15 +11,19 @@ using coproto::LocalAsyncSocket;
 using namespace volePSI;
 using namespace oc;
 
-void RsOprf_eval_test(const CLP&)
+void RsOprf_eval_test(const CLP& cmd)
 {
     RsOprfSender sender;
     RsOprfReceiver recver;
 
     auto sockets = LocalAsyncSocket::makePair();
-    u64 n = 4000;
-    PRNG prng0(block(0, 0));
-    PRNG prng1(block(0, 1));
+    u64 n = cmd.getOr("n", 4000);
+    std::random_device rd;
+    std::default_random_engine gen(rd());
+    std::uniform_int_distribution<u64> dis;
+
+    PRNG prng0(block(dis(gen), dis(gen)));
+    PRNG prng1(block(dis(gen), dis(gen)));
 
     std::vector<block> vals(n), recvOut(n);
 
@@ -54,14 +58,14 @@ void RsOprf_eval_test(const CLP&)
 
 
 
-void RsOprf_mal_test(const CLP&)
+void RsOprf_mal_test(const CLP& cmd)
 {
     RsOprfSender sender;
     RsOprfReceiver recver;
 
     auto sockets = LocalAsyncSocket::makePair();
 
-    u64 n = 4000;
+    u64 n = cmd.getOr("n", 4000);
     PRNG prng0(block(0, 0));
     PRNG prng1(block(0, 1));
 
@@ -99,14 +103,14 @@ void RsOprf_mal_test(const CLP&)
 }
 
 
-void RsOprf_reduced_test(const CLP&)
+void RsOprf_reduced_test(const CLP& cmd)
 {
     RsOprfSender sender;
     RsOprfReceiver recver;
 
     auto sockets = LocalAsyncSocket::makePair();
 
-    u64 n = 4000;
+    u64 n = cmd.getOr("n", 4000);
     PRNG prng0(block(0, 0));
     PRNG prng1(block(0, 1));
 

@@ -13,7 +13,7 @@ using namespace std;
 
 using PRNG = oc::PRNG;
 
-void Benes_Test(const oc::CLP &cmd)
+void Benes_test(const oc::CLP &cmd)
 {
 	int n = cmd.getOr("n", 100);
 

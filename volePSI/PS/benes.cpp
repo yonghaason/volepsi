@@ -45,7 +45,7 @@ void Benes::initialize(int N, vector<int> perm)
 
 	mSwitches.resize(mNumColumns);
 	for (int i = 0; i < mNumColumns; ++i)
-		mSwitches[i].resize(N / 2);
+		mSwitches[i].resize(mN / 2);
 }
 
 // void Benes::DFS(int idx, int route,
@@ -623,11 +623,11 @@ void Benes::benesMaskedEval(oc::BitVector &src,
 
 oc::BitVector Benes::getSwitchesAsBitVec()
 {
-	oc::BitVector stretchedSwitches(mN * mNumColumns / 2);
+	oc::BitVector stretchedSwitches(mNumColumns * (mN / 2));
 	for (int j = 0; j < mNumColumns; ++j)
 		for (int i = 0; i < mN / 2; ++i)
 		{
-			stretchedSwitches[(mN * j) / 2 + i] = mSwitches[j][i];
+			stretchedSwitches[(mN / 2) * j + i] = mSwitches[j][i];
 		}
 	return stretchedSwitches;
 }

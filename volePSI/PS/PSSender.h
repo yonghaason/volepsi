@@ -4,7 +4,6 @@
 #include "volePSI/Paxos.h"
 #include "cryptoTools/Network/IOService.h"
 #include "cryptoTools/Network/Session.h"
-#include <libOTe/TwoChooseOne/Silent/SilentOtExtReceiver.h>
 
 #include "benes.h"
 
@@ -15,10 +14,9 @@ namespace volePSI
 		size_t mN;
 		size_t mLogN;
 		size_t mNumBenesColumns;
-		size_t mNumOts;
+		size_t mNumSwitches;
 		size_t mNumThreads;
 		
-		oc::SilentOtExtReceiver mOtRecver;
 		Benes benes;
 		
 		Proto genBenes(std::vector<std::array<block, 2>>& recvMsg, oc:: PRNG& prng, Socket &chl);
@@ -36,5 +34,6 @@ namespace volePSI
 		Proto runPermAndShare(oc::BitVector &share, oc:: PRNG& prng, Socket &chl);
 
 		std::vector<int> getPerm() {return benes.getPerm();};
+		std::vector<int> getInvPerm() {return benes.getInvPerm();};
 	};
 }

@@ -13,6 +13,7 @@ set(SRCS
     "FileBase_Tests.cpp"
     "Benes_Tests.cpp"
     "PS_Tests.cpp"
+    "Psu_Tests.cpp"
 	)
 	
 if(VOLE_PSI_ENABLE_GMW)
