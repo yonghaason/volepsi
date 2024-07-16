@@ -15,41 +15,17 @@
 #include <libOTe/TwoChooseOne/Silent/SilentOtExtSender.h>
 #include <libOTe/TwoChooseOne/Silent/SilentOtExtReceiver.h>
 
+#include "libOTe/TwoChooseOne/SoftSpokenOT/SoftSpokenShOtExt.h"
+
 namespace volePSI
 {
-
-
-    Proto generateBase(
-        RequiredBase base,
-        u64 partyIdx,
-        oc::PRNG& prng,
-        coproto::Socket& chl,
-        span<block> recvMsg,
-        span<std::array<block, 2>> sendMsg,
-        oc::Timer* timer = nullptr);
-
-    Proto extend(
-        RequiredBase b,
-        span<std::array<block, 2>> baseMsg,
-        oc::PRNG& prng,
-        coproto::Socket& chl,
-        span<block> recvMsgP,
-        span<std::array<block, 2>> sendMsgP);
-
-    Proto extend(
-        RequiredBase b,
-        oc::BitVector baseChoice,
-        span<block> baseMsg,
-        oc::PRNG& prng,
-        coproto::Socket& chl,
-        span<block> recvMsgP,
-        span<std::array<block, 2>> sendMsgP);
-
-    class SilentTripleGen : public oc::TimerAdapter
+    class SilentOteGen : public oc::TimerAdapter
     {
     public:
         bool mHasBase = false;
-        u64 mN, mBatchSize, mNumPer;
+        u64 mBatchSize = 0, mNumOts = 0, mNumOtsPer = 0;
+        u64 mNumTriples = 0, mNumTriplesPer = 0;
+        u64 mNumOteBatches = 0, mNumTripleBatches = 0;
         Mode mMode;
         oc::PRNG mPrng;
 
@@ -59,8 +35,11 @@ namespace volePSI
         span<oc::SilentOtExtSender> mSenderOT;
         span<oc::SilentOtExtReceiver> mRecverOT;
 
-        void init(u64 n, u64 batchSize, u64 numThreads, Mode mode, block seed);
+        void init(u64 numOts, u64 numTriples, u64 batchSize, u64 numThreads, Mode mode, block seed);
 
+        void init(u64 n, u64 batchSize, u64 numThreads, Mode mode, block seed) {
+            init(0, n, batchSize, numThreads, mode, seed);
+        }
 
         RequiredBase mBase;
 
@@ -68,27 +47,59 @@ namespace volePSI
 
         void setBaseOts(span<block> recvOts, span<std::array<block, 2>> sendOts);
 
-        Proto expand(coproto::Socket& chl);
+        Proto expandOt(coproto::Socket& chl);
+        Proto expandTriple(coproto::Socket& chl);
+
+        Proto expand(coproto::Socket& chl) {
+            MC_BEGIN(Proto, this, &chl, comm = u64{});
+            comm = chl.bytesSent();
+
+            MC_AWAIT(expandOt(chl));
+            MC_AWAIT(expandTriple(chl));
+
+            comm = chl.bytesSent() - comm;
+            if (mMode & Mode::Receiver) std::cout << "OteReceiver::";
+            else std::cout << "OteSender::";
+            std::cout << "Expansion (" << mNumOts + mNumTriples << ") takes " << comm << " bytes" << std::endl;
+
+            mHasBase = false;
+            MC_END();
+        }
 
         bool hasBaseOts()  { return mHasBase; }
-
 
         Proto generateBaseOts(u64 partyIdx, oc::PRNG& prng, coproto::Socket& chl)
         {
             MC_BEGIN(Proto,this, partyIdx, &prng, &chl,
-                rMsg = std::vector<block>{},
-                sMsg = std::vector<std::array<block, 2>>{},
-                b = RequiredBase{}
+                rMsg = oc::AlignedUnVector<block>{},
+                sMsg = oc::AlignedUnVector<std::array<block, 2>>{},
+                b = RequiredBase{},
+                baseOtSender = std::move(oc::SoftSpokenShOtSender{}),
+                baseOtRecver = std::move(oc::SoftSpokenShOtReceiver{}),
+                
+                comm = u64{}
             );
 
             setTimePoint("TripleGen::generateBaseOts begin");
-            b = requiredBaseOts();
 
+            b = requiredBaseOts();
             if (b.mNumSend || b.mRecvChoiceBits.size())
             {
+                comm = chl.bytesSent();
+
                 rMsg.resize(b.mRecvChoiceBits.size());
                 sMsg.resize(b.mNumSend);
-                MC_AWAIT(generateBase(b, partyIdx, prng, chl, rMsg, sMsg, mTimer));
+                
+                if (partyIdx) { // Receiver
+                    MC_AWAIT(baseOtRecver.receive(b.mRecvChoiceBits, rMsg, prng, chl));
+                    std::cout << "OTeReceiver::";
+                }
+                else {
+                    MC_AWAIT(baseOtSender.send(sMsg, prng, chl));
+                    std::cout << "OTeSender::";
+                }
+                comm = chl.bytesSent() - comm;
+                std::cout << "BaseOT (" << b.mNumSend + b.mRecvChoiceBits.size() << ") takes " << comm << " bytes" << std::endl;
                 setBaseOts(rMsg, sMsg);
             }
             setTimePoint("TripleGen::generateBaseOts end");
@@ -96,8 +107,12 @@ namespace volePSI
             MC_END();
         }
 
+        // OT extension
+        std::vector<std::array<block, 2>> mSendMsgs;
+        std::vector<block> mRecvMsgs;
+        oc::BitVector mRecvChoices;
 
-        // A * C = B + D
+        // Triple: A * C = B + D
         span<block> mMult, mAdd;
         std::vector<block> mAVec, mBVec, mDVec;
         oc::BitVector mCBitVec;

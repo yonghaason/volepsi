@@ -15,10 +15,13 @@ namespace volePSI
         BetaCircuit& cir,
         u64 numThreads,
         u64 pIdx,
-        block seed)
+        block seed,
+        u64 oteBatchSize)
     {
         mIdx = pIdx;
         mN = n;
+        mOteBatchSize = oteBatchSize;
+        mNumThreads = numThreads;
 
         mRoundIdx = 0;
         mCir = cir;
@@ -36,9 +39,7 @@ namespace volePSI
         mPhiPrng.SetSeed(mPrng.get(), mWords.cols());
 
         mNumOts = mWords.cols() * 128 * mCir.mNonlinearGateCount * 2;
-
-
-
+        
         mPrint = mCir.mPrints.begin();
     }
 
@@ -63,9 +64,9 @@ namespace volePSI
             tg.setTimer(*mTimer);
 
         tg.init(mNumOts, batchSize, numThreads, mIdx ? Mode::Receiver : Mode::Sender, mPrng.get());
+        
         if (tg.hasBaseOts() == false)
             MC_AWAIT(tg.generateBaseOts(mIdx, mPrng, chl));
-
 
         MC_AWAIT(tg.expand(chl));
         if (mIdx)
@@ -87,7 +88,6 @@ namespace volePSI
 
         if (mO.mDebug)
         {
-
             A2.resize(mA.size());
             B2.resize(mA.size());
             C2.resize(mA.size());
@@ -153,12 +153,11 @@ namespace volePSI
 
     Proto Gmw::run(coproto::Socket& chl)
     {
-        MC_BEGIN(Proto,this, &chl, i = u64{});
+        MC_BEGIN(Proto,this, &chl, i = u64{}, comm = u64{});
 
-        if (mA.size() == 0)
+        if (mA.size() == 0 && mC.size() == 0)
         {
-            // MC_AWAIT(generateTriple(1 << 20, 2, chl));
-            MC_AWAIT(generateTriple(1 << 24, 2, chl));
+            MC_AWAIT(generateTriple(mOteBatchSize, mNumThreads, chl));
         }
 
         if (mO.mDebug)
@@ -176,10 +175,20 @@ namespace volePSI
 
         mRoundIdx = 0;
 
+        comm = chl.bytesSent();
+
         for (i = 0; i < numRounds(); ++i)
             MC_AWAIT(roundFunction(chl));
 
+        comm = chl.bytesSent() - comm;
+        if (mIdx) std::cout << "GMWReceiver::";
+        else std::cout << "GMWSender::";
+        std::cout << "Online takes " << comm << " bytes" << std::endl;
+
         mA = {};
+        mB = {};
+        mC = {};
+        mD = {};
 
         MC_END();
     }

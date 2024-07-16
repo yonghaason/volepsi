@@ -13,7 +13,8 @@ namespace volePSI
 		size_t mLogN;
 		size_t mNumBenesColumns;
 		size_t mNumSwitches;
-		size_t mNumThreads;		
+		size_t mNumThreads;
+		std::vector<std::array<block, 2>> mRotSendMsgs;
 
 		template <typename ValueType>
 		void prepareCorrection(u64 depth, u64 permIdx,
@@ -33,7 +34,11 @@ namespace volePSI
 
 	public:
 
-		Proto genOT(oc::PRNG& prng, std::vector<std::array<block, 2>> &rotSendMsgs, Socket &chl);
+		Proto genOT(oc::PRNG& prng, Socket &chl);
+		void setOT(std::vector<std::array<block, 2>> &rotSendMsgs) {
+			assert(rotSendMsgs.size() == mNumSwitches);
+			mRotSendMsgs = rotSendMsgs;
+		}
 
 		void init(u64 N, u64 numThreads);
 		

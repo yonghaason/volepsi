@@ -41,6 +41,10 @@ namespace volePSI
             u64 mSsp = 0, mNumThreads = 0;
             PRNG mPrng;
             ValueShareType mType = ValueShareType::Xor;
+            u64 mOteBatchSize = 0;
+            bool mSetup = false;
+            
+            u64 comm, commexp;
 
             void init(
                 u64 senderSize,
@@ -49,7 +53,9 @@ namespace volePSI
                 u64 statSecParam,
                 block seed,
                 u64 numThreads,
-                ValueShareType type = ValueShareType::Xor)
+                u64 oteBatchSize = (1ull << 20),
+                ValueShareType type = ValueShareType::Xor
+                )
             {
 
                 mSenderSize = senderSize;
@@ -59,12 +65,15 @@ namespace volePSI
                 mPrng.SetSeed(seed);
                 mNumThreads = numThreads;
                 mType = type;
+                mOteBatchSize = oteBatchSize;
             }
         };
     }
 
     class RsCpsiSender : public details::RsCpsiBase, public oc::TimerAdapter
-    {
+    {        
+        Gmw cmp;
+
     public:
         struct Sharing
         {
@@ -87,13 +96,21 @@ namespace volePSI
         // The output is written to s.
         Proto send(span<block> Y, oc::MatrixView<u8> values, Sharing& s, Socket& chl);
 
-        Proto sendNew(span<block> Y, oc::MatrixView<u8> values, Sharing& s, Socket& chl);
-
+        void setTriple(span<block> A, span<block> B, u64 numTriples) {
+            cmp.setTriples(
+                A.subspan(0, numTriples / 256), // A
+                B.subspan(0, numTriples / 256), // B
+                A.subspan(numTriples / 256), // C
+                B.subspan(numTriples / 256) // D
+            );
+        }
     };
 
 
     class RsCpsiReceiver :public details::RsCpsiBase, public oc::TimerAdapter
     {
+        Gmw cmp;
+
     public:
 
         struct Sharing
@@ -115,7 +132,14 @@ namespace volePSI
         // The output is written to s.
         Proto receive(span<block> X, Sharing& s, Socket& chl);
 
-        Proto receiveNew(span<block> X, Sharing& s, Socket& chl);
+        void setTriple(span<block> C, span<block> D, u64 numTriples) {
+            cmp.setTriples(
+                C.subspan(numTriples / 256), // A
+                D.subspan(numTriples / 256), // B
+                C.subspan(0, numTriples / 256), // C
+                D.subspan(0, numTriples / 256) // D
+            );
+        }
     };
 
 }

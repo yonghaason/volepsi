@@ -19,27 +19,47 @@ namespace
         std::vector<block>& sendSet,
         u64 byteLength,
         u64 nt = 1,
+        u64 oteBatchSize = (1ull << 20),
         ValueShareType type = ValueShareType::Xor)
     {
-        auto sockets = LocalAsyncSocket::makePair();
 
+        std::cout << std::endl;
+        auto sockets = LocalAsyncSocket::makePair();
 
         RsCpsiReceiver recver;
         RsCpsiSender sender;
 
+        Timer timer, s, r;
+
         oc::Matrix<u8> senderValues(sendSet.size(), byteLength);
         std::memcpy(senderValues.data(), sendSet.data(), sendSet.size() * byteLength);
 
-        recver.init(sendSet.size(), recvSet.size(), byteLength, 40, prng.get(), nt);
-        sender.init(sendSet.size(), recvSet.size(), byteLength, 40, prng.get(), nt);
+        recver.init(sendSet.size(), recvSet.size(), byteLength, 40, prng.get(), nt, oteBatchSize);
+        sender.init(sendSet.size(), recvSet.size(), byteLength, 40, prng.get(), nt, oteBatchSize);
 
         RsCpsiReceiver::Sharing rShare;
         RsCpsiSender::Sharing sShare;
 
-        auto p0 = recver.receiveNew(recvSet, rShare, sockets[0]);
-        auto p1 = sender.sendNew(sendSet, senderValues, sShare, sockets[1]);
+        timer.setTimePoint("start");
+        
+        recver.setTimer(r);
+        sender.setTimer(s);
+
+        auto p0 = recver.receive(recvSet, rShare, sockets[0]);
+        auto p1 = sender.send(sendSet, senderValues, sShare, sockets[1]);
 
         eval(p0, p1);
+
+        timer.setTimePoint("end");
+
+        std::cout << "Total Comm: " 
+            << sockets[0].bytesSent() 
+            << " + " << sockets[1].bytesSent() 
+            << " = " << (sockets[0].bytesSent() + sockets[1].bytesSent())
+            << " bytes" << std::endl;
+
+        std::cout << timer << std::endl;
+        // std::cout <<"s\n" << s << "\nr" << r << std::endl;
 
         bool failed = false;
         std::vector<u64> intersection;
@@ -91,14 +111,15 @@ namespace
 
 void Cpsi_Rs_empty_test(const CLP& cmd)
 {
-    u64 n = cmd.getOr("n", 133);
+    u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
     u64 byteLength = cmd.getOr("bytelen", 16);
+    u64 oteBatchSize = 1ull << cmd.getOr("logotbatch", 20);
     std::vector<block> recvSet(n), sendSet(n);
     PRNG prng(ZeroBlock);
     prng.get(recvSet.data(), recvSet.size());
     prng.get(sendSet.data(), sendSet.size());
 
-    auto inter = runCpsi(prng, recvSet, sendSet, byteLength);
+    auto inter = runCpsi(prng, recvSet, sendSet, byteLength, 1, oteBatchSize);
 
     if (inter.size())
         throw RTE_LOC;
@@ -107,8 +128,9 @@ void Cpsi_Rs_empty_test(const CLP& cmd)
 
 void Cpsi_Rs_partial_test(const CLP& cmd)
 {
-    u64 n = cmd.getOr("n", 128);
+    u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
     u64 byteLength = cmd.getOr("bytelen", 16);
+    u64 oteBatchSize = 1ull << cmd.getOr("logotbatch", 20);
     std::vector<block> recvSet(n), sendSet(n);
     std::random_device rd;
     std::default_random_engine gen(rd());
@@ -128,7 +150,7 @@ void Cpsi_Rs_partial_test(const CLP& cmd)
         }
     }
 
-    auto inter = runCpsi(prng, recvSet, sendSet, byteLength);
+    auto inter = runCpsi(prng, recvSet, sendSet, byteLength, 1, oteBatchSize);
     std::set<u64> act(inter.begin(), inter.end());
     if (act != exp)
     {   
@@ -146,8 +168,9 @@ void Cpsi_Rs_partial_test(const CLP& cmd)
 
 void Cpsi_Rs_full_test(const CLP& cmd)
 {
-    u64 n = cmd.getOr("n", 243);
+    u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
     u64 byteLength = cmd.getOr("bytelen", 16);
+    u64 oteBatchSize = 1ull << (cmd.getOr("logotbatch", 20));
     std::vector<block> recvSet(n), sendSet(n);
     PRNG prng(ZeroBlock);
     prng.get(recvSet.data(), recvSet.size());
@@ -157,7 +180,7 @@ void Cpsi_Rs_full_test(const CLP& cmd)
     for (u64 i = 0; i < n; ++i)
         exp.insert(i);
 
-    auto inter = runCpsi(prng, recvSet, sendSet, byteLength);
+    auto inter = runCpsi(prng, recvSet, sendSet, byteLength, 1, oteBatchSize);
     std::set<u64> act(inter.begin(), inter.end());
     if (act != exp)
         throw RTE_LOC;
@@ -168,6 +191,7 @@ void Cpsi_Rs_full_asym_test(const CLP& cmd)
     u64 ns = cmd.getOr("ns", 2432);
     u64 nr = cmd.getOr("nr", 212);
     u64 byteLength = cmd.getOr("bytelen", 16);
+    u64 oteBatchSize = 1ull << cmd.getOr("logotbatch", 20);
     std::vector<block> recvSet(nr), sendSet(ns);
     PRNG prng(ZeroBlock);
     prng.get(recvSet.data(), recvSet.size());
@@ -178,7 +202,7 @@ void Cpsi_Rs_full_asym_test(const CLP& cmd)
     for (u64 i = 0; i < std::min<u64>(ns,nr); ++i)
         exp.insert(i);
 
-    auto inter = runCpsi(prng, recvSet, sendSet, byteLength);
+    auto inter = runCpsi(prng, recvSet, sendSet, byteLength, 1, oteBatchSize);
     std::set<u64> act(inter.begin(), inter.end());
     if (act != exp)
         throw RTE_LOC;
@@ -189,7 +213,7 @@ void Cpsi_Rs_full_asym_test(const CLP& cmd)
 
 void Cpsi_Rs_full_add32_test(const CLP& cmd)
 {
-    //u64 n = cmd.getOr("n", 13243);
+    //u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
     //std::vector<block> recvSet(n), sendSet(n);
     //PRNG prng(ZeroBlock);
     //prng.get(recvSet.data(), recvSet.size());

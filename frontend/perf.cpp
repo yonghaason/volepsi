@@ -5,6 +5,7 @@
 #include "volePSI/SimpleIndex.h"
 
 #include "libdivide.h"
+#include <unistd.h>
 using namespace oc;
 using namespace volePSI;;
 
@@ -450,7 +451,7 @@ void perfPSI(oc::CLP& cmd)
 void perfCPSI(oc::CLP& cmd)
 {
 #ifdef VOLE_PSI_ENABLE_CPSI
-	auto n = 1ull << cmd.getOr("nn", 10);
+	auto n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
 	auto t = cmd.getOr("t", 1ull);
 	//auto mal = cmd.isSet("mal");
 	auto v = cmd.isSet("v");
@@ -493,7 +494,6 @@ void perfCPSI(oc::CLP& cmd)
 
 	if (v)
 	{
-
 		std::cout << timer << "\ns\n" << s << "\nr" << r << std::endl;
 		std::cout << "comm " << socket[0].bytesSent() << " + " << socket[1].bytesSent()
 			<< " = " << (socket[0].bytesSent() + socket[1].bytesSent())

@@ -17,7 +17,7 @@ if(VOLE_PSI_ENABLE_GMW)
     list(APPEND SRCS
         "GMW/Circuit.cpp"
         "GMW/Gmw.cpp"
-        "GMW/SilentTripleGen.cpp"
+        "GMW/SilentOteGen.cpp"
     )
 endif()
 

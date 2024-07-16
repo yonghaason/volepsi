@@ -13,14 +13,15 @@ namespace volePSI
 		setTimePoint("PSReceiver::initialize");
 	}
 
-	Proto PSReceiver::genOT(oc::PRNG &prng, std::vector<std::array<block, 2>> &rotSendMsgs, Socket &chl)
+	Proto PSReceiver::genOT(oc::PRNG &prng, Socket &chl)
 	{
-		MC_BEGIN(Proto, this, &prng, &rotSendMsgs, &chl,
+		MC_BEGIN(Proto, this, &prng, &chl,
+				 rotSendMsgs = std::vector<std::array<block, 2>>{},
 				 otSender = std::make_unique<oc::SilentOtExtSender>());
 		otSender->configure(mNumSwitches, 2, mNumThreads);
 		MC_AWAIT(otSender->genSilentBaseOts(prng, chl));
-		rotSendMsgs.resize(mNumSwitches);
-		MC_AWAIT(otSender->silentSend(rotSendMsgs, prng, chl));
+		mRotSendMsgs.resize(mNumSwitches);
+		MC_AWAIT(otSender->silentSend(mRotSendMsgs, prng, chl));
 		MC_END();
 	}
 
@@ -28,7 +29,6 @@ namespace volePSI
 	{
 		MC_BEGIN(Proto, this, &retMasks, &prng, &chl,
 				 masks = std::vector<block>{},
-				 rotSendMsgs = std::vector<std::array<block, 2>>{},
 				 sotMsgs = std::vector<std::array<std::array<block, 2>, 2>>{},
 				 bitCorrection = oc::BitVector{},
 				 corrections = std::vector<std::array<block, 2>>{},
@@ -47,28 +47,32 @@ namespace volePSI
 		}
 
 		sotMsgs.resize(mNumSwitches);
-		MC_AWAIT(genOT(prng, rotSendMsgs, chl)); // sample random ot blocks
-
-		setTimePoint("PSReceiver::receive-OT");
+		if (mRotSendMsgs.size() < mNumSwitches) {
+			MC_AWAIT(genOT(prng, chl)); // sample random ot blocks
+			setTimePoint("PSReceiver::send-OT");
+		}
+		else {
+			mRotSendMsgs.resize(mNumSwitches);
+		}
 
 		bitCorrection.resize(mNumSwitches);
 		MC_AWAIT(chl.recv(bitCorrection));
 		setTimePoint("PSReceiver::receive-bitcorrection");
 
-		for (i = 0; i < rotSendMsgs.size(); i++)
+		for (i = 0; i < mRotSendMsgs.size(); i++)
 		{
 			if (bitCorrection[i] == 1)
 			{
-				temp = rotSendMsgs[i][0];
-				rotSendMsgs[i][0] = rotSendMsgs[i][1];
-				rotSendMsgs[i][1] = temp;
+				temp = mRotSendMsgs[i][0];
+				mRotSendMsgs[i][0] = mRotSendMsgs[i][1];
+				mRotSendMsgs[i][1] = temp;
 			}
 		}
 
 		for (i = 0; i < sotMsgs.size(); i++)
 		{
-			sotMsgs[i][0] = {rotSendMsgs[i][0], aes.ecbEncBlock(rotSendMsgs[i][0])};
-			sotMsgs[i][1] = {rotSendMsgs[i][1], aes.ecbEncBlock(rotSendMsgs[i][1])};
+			sotMsgs[i][0] = {mRotSendMsgs[i][0], aes.ecbEncBlock(mRotSendMsgs[i][0])};
+			sotMsgs[i][1] = {mRotSendMsgs[i][1], aes.ecbEncBlock(mRotSendMsgs[i][1])};
 		}
 
 		corrections.resize(mNumSwitches);
@@ -293,7 +297,6 @@ namespace volePSI
 	{
 		MC_BEGIN(Proto, this, &retMasks, &prng, &chl,
 				 masks = oc::BitVector{},
-				 rotSendMsgs = std::vector<std::array<block, 2>>{},
 				 sotMsgs = std::vector<std::array<std::array<bool, 2>, 2>>{},
 				 bitCorrection = oc::BitVector{},
 				 corrections = std::vector<std::array<bool, 2>>{},
@@ -308,29 +311,35 @@ namespace volePSI
 		retMasks[0] = masks;
 
 		sotMsgs.resize(mNumSwitches);
-		MC_AWAIT(genOT(prng, rotSendMsgs, chl)); // sample random ot blocks
+		if (mRotSendMsgs.size() < mNumSwitches) {
+			MC_AWAIT(genOT(prng, chl)); // sample random ot blocks
+			setTimePoint("PSReceiver::send-OT");
+		}
+		else {
+			mRotSendMsgs.resize(mNumSwitches);
+		}
 
-		setTimePoint("PSReceiver::receive-OT");
-
+		std::cout << "psReceiver::genBase " << mRotSendMsgs.size() << std::endl;
+		
 		bitCorrection.resize(mNumSwitches);
 		MC_AWAIT(chl.recv(bitCorrection));
 		setTimePoint("PSReceiver::receive-bitcorrection");
 
-		for (i = 0; i < rotSendMsgs.size(); i++)
+		for (i = 0; i < mRotSendMsgs.size(); i++)
 		{
 			if (bitCorrection[i] == 1)
 			{
-				temp = rotSendMsgs[i][0];
-				rotSendMsgs[i][0] = rotSendMsgs[i][1];
-				rotSendMsgs[i][1] = temp;
+				temp = mRotSendMsgs[i][0];
+				mRotSendMsgs[i][0] = mRotSendMsgs[i][1];
+				mRotSendMsgs[i][1] = temp;
 			}
 		}
 
-		// seems to be improved more
+		// Can be improved more ... 
 		for (i = 0; i < sotMsgs.size(); i++)
 		{
-			sotMsgs[i][0] = {rotSendMsgs[i][0].mData[0] & 1, aes.ecbEncBlock(rotSendMsgs[i][0]).mData[0] & 1};
-			sotMsgs[i][1] = {rotSendMsgs[i][1].mData[0] & 1, aes.ecbEncBlock(rotSendMsgs[i][1]).mData[0] & 1};
+			sotMsgs[i][0] = {mRotSendMsgs[i][0].mData[0] & 1, aes.ecbEncBlock(mRotSendMsgs[i][0]).mData[0] & 1};
+			sotMsgs[i][1] = {mRotSendMsgs[i][1].mData[0] & 1, aes.ecbEncBlock(mRotSendMsgs[i][1]).mData[0] & 1};
 		}
 
 		corrections.resize(mNumSwitches);

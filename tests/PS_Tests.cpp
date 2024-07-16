@@ -13,38 +13,6 @@ using namespace volePSI;
 using namespace oc;
 using namespace coproto;
 
-void OText_test(const oc::CLP &cmd)
-{
-	PSReceiver recver;
-	PSSender sender;
-
-	auto sockets = LocalAsyncSocket::makePair();
-
-	u64 n = cmd.getOr("n", 100);
-	u64 nt = cmd.getOr("nt", 1);
-
-	recver.init(n, nt);
-	sender.init(n, nt);
-	
-	PRNG prng0(block(0, 0));
-	PRNG prng1(block(0, 1));
-
-	std::vector<std::array<block, 2>> sendMsgs;
-	std::vector<block> recvMsgs;
-	oc::BitVector choices;
-
-	auto p0 = sender.genOT(prng0, recvMsgs, choices, sockets[0]);
-	auto p1 = recver.genOT(prng1, sendMsgs, sockets[1]);
-
-	eval(p0, p1);
-
-	for (u64 i = 0; i < n; ++i)
-	{
-		if (sendMsgs[i][choices[i]] != recvMsgs[i])
-			throw RTE_LOC;
-	}		
-}
-
 void PS_blk_test(const oc::CLP &cmd)
 {
 	PSReceiver recver;

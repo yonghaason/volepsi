@@ -16,6 +16,8 @@ namespace volePSI
 		size_t mNumBenesColumns;
 		size_t mNumSwitches;
 		size_t mNumThreads;
+		std::vector<block> mRotRecvMsgs;
+		oc::BitVector mRotChoices;
 		
 		Benes benes;
 		
@@ -25,7 +27,13 @@ namespace volePSI
 
 	public:
 		
-		Proto genOT(oc:: PRNG& prng, std::vector<block> &rotRecvMsgs, oc::BitVector &rotChoices, Socket &chl);		
+		Proto genOT(oc:: PRNG& prng, Socket &chl);
+		void setOT(std::vector<block> &rotRecvMsgs, oc::BitVector &rotChoices) {
+			assert(rotRecvMsgs.size() == mNumSwitches);
+			assert(rotRecvMsgs.size() == rotChoices.size());
+			mRotRecvMsgs = rotRecvMsgs;
+			mRotChoices = rotChoices;
+		}
 		
 	// public:
 		void init(u64 N, u64 numThreads, std::vector<int> perm = std::vector<int>());

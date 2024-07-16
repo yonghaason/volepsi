@@ -10,10 +10,9 @@
 #include "volePSI/config.h"
 #ifdef VOLE_PSI_ENABLE_GMW
 
-void generateBase_test();
-void SilentTripleGen_test();
-//void IknpTripleGen_test();
-
+// void generateBase_test();
+void SilentOteGen_test(const oc::CLP& cmd);
+void baseOT_Test(const oc::CLP& cmd);
 
 
 void Gmw_half_test(const oc::CLP& cmd);

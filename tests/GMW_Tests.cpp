@@ -2,80 +2,29 @@
 #include "GMW_Tests.h"
 #include "volePSI/Defines.h"
 #include "volePSI/GMW/Gmw.h"
-#include "volePSI/GMW/SilentTripleGen.h"
+#include "volePSI/GMW/SilentOteGen.h"
 #include "cryptoTools/Network/IOService.h"
 #include "cryptoTools/Network/Session.h"
 #include "cryptoTools/Circuit/BetaLibrary.h"
 #include "Common.h"
 #include "coproto/Socket/LocalAsyncSock.h"
 
+#include <unistd.h>
+
 using namespace volePSI;
 using coproto::LocalAsyncSocket;
 
 using PRNG = oc::PRNG;
-void generateBase_test()
+
+void SilentOteGen_test(const oc::CLP& cmd)
 {
 
-    RequiredBase b0, b1;
-
-    b0.mNumSend = 4;
-    b1.mNumSend = 2;
-    b0.mRecvChoiceBits.resize(b1.mNumSend);
-    b1.mRecvChoiceBits.resize(b0.mNumSend);
-
-    oc::PRNG prng(oc::ZeroBlock);
-    b0.mRecvChoiceBits.randomize(prng);
-    b1.mRecvChoiceBits.randomize(prng);
-
-    auto sockets = LocalAsyncSocket::makePair();
-
-    std::vector<block> recvMsg0(b0.mRecvChoiceBits.size());
-    std::vector<block> recvMsg1(b1.mRecvChoiceBits.size());
-    std::vector<std::array<block, 2>> sendMsg0(b0.mRecvChoiceBits.size());
-    std::vector<std::array<block, 2>> sendMsg1(b1.mRecvChoiceBits.size());
-
-    auto p0 = generateBase(b0, 0, prng, sockets[0], recvMsg0, sendMsg1);
-    auto p1 = generateBase(b1, 1, prng, sockets[1], recvMsg1, sendMsg0);
-    eval(p0, p1);
-
-    for (u64 i = 0; i < recvMsg0.size(); i++)
-    {
-        if (neq(recvMsg0[i], sendMsg0[i][b0.mRecvChoiceBits[i]]))
-        {
-            std::cout << i << " 0 " << recvMsg0[i] << " " << b0.mRecvChoiceBits[i] << " (" << sendMsg0[i][0] << ' ' << sendMsg0[i][1] << ")" << std::endl;
-            throw RTE_LOC;
-        }
-        if (eq(sendMsg0[i][0], sendMsg0[i][1]))
-        {
-            std::cout << i << " 0 (" << sendMsg0[i][0] << ' ' << sendMsg0[i][1] << ")" << std::endl;
-            throw RTE_LOC;
-        }
-    }
-    for (u64 i = 0; i < recvMsg1.size(); i++)
-    {
-        if (neq(recvMsg1[i], sendMsg1[i][b1.mRecvChoiceBits[i]]))
-        {
-            std::cout << i << " 1 " << recvMsg1[i] << " " << b1.mRecvChoiceBits[i] << " (" << sendMsg1[i][0] << ' ' << sendMsg1[i][1] << ")" << std::endl;
-            throw RTE_LOC;
-        }
-        if (eq(sendMsg1[i][0], sendMsg1[i][1]))
-        {
-            std::cout << i << " 1 (" << sendMsg1[i][0] << ' ' << sendMsg1[i][1] << ")" << std::endl;
-            throw RTE_LOC;
-        }
-    }
-}
-
-
-void SilentTripleGen_test()
-{
-
-    u64 n = 4864;
-    u64 bs = 1000000;
+    u64 n = cmd.getOr("n", 4832);
+    u64 bs = cmd.getOr("bs", 1ull << 20);
     u64 nt = 1;
     //Mode mode = Mode::Dual;
 
-    SilentTripleGen t0, t1;
+    SilentOteGen t0, t1;
     auto sockets = LocalAsyncSocket::makePair();
 
 
@@ -118,21 +67,53 @@ void SilentTripleGen_test()
             //    throw std::runtime_error("");
         }
     }
-    //void validate(coproto::Socket & chl);
+    
+    std::cout << "Total Comm: " 
+            << sockets[0].bytesSent() 
+            << " + " << sockets[1].bytesSent() 
+            << " = " << (sockets[0].bytesSent() + sockets[1].bytesSent())
+            << " bytes" << std::endl;
+}
 
+void baseOT_Test(const oc::CLP& cmd)
+{
 
-    //if (mO.mDebug)
-    //{
-    //    block b;
-    //    oc::RandomOracle ro(16);
-    //    ro.Update(t0.mA.data(), t0.mA.size());
-    //    ro.Update(t0.mB.data(), t0.mB.size());
-    //    ro.Update(t0.mC.data(), t0.mC.size());
-    //    ro.Update(t0.mD.data(), t0.mD.size());
-    //    ro.Final(b);
+    u64 n = cmd.getOr("n", 1ull << 20);
+    u64 bs = cmd.getOr("bs", 1ull << 20);
+    u64 nt = 1;
+    
+    SilentOteGen t0, t1;
+    auto sockets = LocalAsyncSocket::makePair();
 
-    //    oc::lout << "pp " << 0 << " " << b << std::endl;
-    //}
+    PRNG prng0(oc::ZeroBlock);
+    PRNG prng1(oc::OneBlock);
+
+    t0.init(n, bs, nt, Mode::Receiver, prng0.get());
+    t1.init(n, bs, nt, Mode::Sender, prng1.get());
+
+    auto p0 = t0.generateBaseOts(1, prng0, sockets[0]);
+    auto p1 = t1.generateBaseOts(0, prng1, sockets[1]);
+
+    eval(p0, p1);
+    
+    std::cout << "BaseOT Comm: " 
+            << sockets[0].bytesSent() 
+            << " + " << sockets[1].bytesSent() 
+            << " = " << (sockets[0].bytesSent() + sockets[1].bytesSent())
+            << " bytes" << std::endl;          
+    
+    u64 comm0 = sockets[0].bytesSent(), comm1 = sockets[1].bytesSent();
+
+    auto p02 = t0.expand(sockets[0]);
+    auto p12 = t1.expand(sockets[1]);
+
+    eval(p02, p12);
+    
+    std::cout << "Expand Comm: " 
+            << sockets[0].bytesSent() -comm0
+            << " + " << sockets[1].bytesSent() - comm1
+            << " = " << (sockets[0].bytesSent() + sockets[1].bytesSent()) - comm0 - comm1
+            << " bytes" << std::endl;
 }
 
 

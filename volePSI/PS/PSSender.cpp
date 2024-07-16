@@ -19,15 +19,16 @@ namespace volePSI
 		setTimePoint("PSSender::initialize");
 	}
 
-	Proto PSSender::genOT(oc::PRNG &prng, std::vector<block> &rotRecvMsgs, oc::BitVector &rotChoices, Socket &chl)
+	Proto PSSender::genOT(oc::PRNG &prng, Socket &chl)
 	{
-		MC_BEGIN(Proto, this, &prng, &rotRecvMsgs, &rotChoices, &chl,
+		MC_BEGIN(Proto, this, &prng, &chl,
+				 rotRecvMsgs = std::vector<block>{},
 				 otReceiver = std::make_unique<oc::SilentOtExtReceiver>());
 		otReceiver->configure(mNumSwitches, 2, mNumThreads);
 		MC_AWAIT(otReceiver->genSilentBaseOts(prng, chl));
-		rotChoices.resize(mNumSwitches);
-		rotRecvMsgs.resize(mNumSwitches);
-		MC_AWAIT(otReceiver->silentReceive(rotChoices, rotRecvMsgs, prng, chl));
+		mRotChoices.resize(mNumSwitches);
+		mRotRecvMsgs.resize(mNumSwitches);
+		MC_AWAIT(otReceiver->silentReceive(mRotChoices, mRotRecvMsgs, prng, chl));
 		MC_END();
 	}
 
@@ -35,8 +36,6 @@ namespace volePSI
 		std::vector<std::array<block, 2>> &recvMsg, oc::PRNG &prng, Socket &chl)
 	{
 		MC_BEGIN(Proto, this, &recvMsg, &prng, &chl,
-				 rotRecvMsgs = std::vector<block>{},
-				 rotChoices = oc::BitVector{},
 				 switches = oc::BitVector{},
 				 bitCorrection = oc::BitVector{},
 				 recvCorr = std::vector<std::array<block, 2>>{},
@@ -44,17 +43,22 @@ namespace volePSI
 				 temp = std::array<block, 2>{},
 				 i = u64{});
 
-		MC_AWAIT(genOT(prng, rotRecvMsgs, rotChoices, chl));
-		
-		setTimePoint("PSSender::send-OT");
+		if (mRotRecvMsgs.size() < mNumSwitches) {
+			MC_AWAIT(genOT(prng, chl));
+			setTimePoint("PSSender::recv-OT");
+		}
+		else {
+			mRotRecvMsgs.resize(mNumSwitches);
+			mRotChoices.resize(mNumSwitches);
+		}
 		
 		switches = benes.getSwitchesAsBitVec();
 		recvMsg.resize(switches.size());
 		for (i = 0; i < recvMsg.size(); i++)
 		{
-			recvMsg[i] = {rotRecvMsgs[i], aes.ecbEncBlock(rotRecvMsgs[i])};
+			recvMsg[i] = {mRotRecvMsgs[i], aes.ecbEncBlock(mRotRecvMsgs[i])};
 		}
-		bitCorrection = switches ^ rotChoices;
+		bitCorrection = switches ^ mRotChoices;
 		MC_AWAIT(chl.send(bitCorrection));
 		setTimePoint("PSSender::send-bitcorrection");
 
@@ -83,7 +87,6 @@ namespace volePSI
 				 i = u64{},
 				 j = u64{});
 
-		std::cout << "PSSender::genBenes" << std::endl;
 		MC_AWAIT(genBenes(recvMsg, prng, chl));
 
 		share.resize(mN);
@@ -108,8 +111,6 @@ namespace volePSI
 		std::vector<std::array<bool, 2>> &recvMsg, oc::PRNG &prng, Socket &chl)
 	{
 		MC_BEGIN(Proto, this, &recvMsg, &prng, &chl,
-				 rotRecvMsgs = std::vector<block>{},
-				 rotChoices = oc::BitVector{},
 				 switches = oc::BitVector{},
 				 bitCorrection = oc::BitVector{},
 				 recvCorr = std::vector<std::array<bool, 2>>{},
@@ -117,18 +118,24 @@ namespace volePSI
 				 temp = std::array<bool, 2>{},
 				 i = u64{});
 
-		MC_AWAIT(genOT(prng, rotRecvMsgs, rotChoices, chl));
-
-		setTimePoint("PSSender::send-OT");
-
+		if (mRotRecvMsgs.size() < mNumSwitches) {
+			MC_AWAIT(genOT(prng, chl));
+			setTimePoint("PSSender::recv-OT");
+		}
+		else {
+			mRotRecvMsgs.resize(mNumSwitches);
+			mRotChoices.resize(mNumSwitches);
+		}
+		
 		switches = benes.getSwitchesAsBitVec();
 		recvMsg.resize(switches.size());
 		
+		// Can be improved more ... 
 		for (i = 0; i < recvMsg.size(); i++)
 		{
-			recvMsg[i] = {rotRecvMsgs[i].mData[0] & 1, aes.ecbEncBlock(rotRecvMsgs[i]).mData[0] & 1};
+			recvMsg[i] = {mRotRecvMsgs[i].mData[0] & 1, aes.ecbEncBlock(mRotRecvMsgs[i]).mData[0] & 1};
 		}
-		bitCorrection = switches ^ rotChoices;		
+		bitCorrection = switches ^ mRotChoices;		
 		MC_AWAIT(chl.send(bitCorrection));
 		setTimePoint("PSSender::send-bitcorrection");
 

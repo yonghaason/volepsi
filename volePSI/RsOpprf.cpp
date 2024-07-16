@@ -61,8 +61,11 @@ namespace volePSI
 			type = PaxosParam::Binary,
 
 			diffPtr = std::unique_ptr<u8[]> {},
-			diffU8 = span<u8> {}
+			diffU8 = span<u8> {},
+			comm = u64{}
 			);
+
+		comm = chl.bytesSent();
 
 		setTimePoint("RsOpprfSender::send begin");
 		n = X.size();
@@ -85,6 +88,9 @@ namespace volePSI
 			mOprfSender.setTimer(*mTimer);
 
 		MC_AWAIT(mOprfSender.send(recverSize, prng, chl, numThreads));
+
+		comm = chl.bytesSent() - comm;
+		std::cout << "OpprfSender::Send OPRF = " << comm << " bytes" << std::endl;
 
 		diffPtr.reset(new u8[nm]);
 		diffU8 = span<u8>(diffPtr.get(), nm);
@@ -132,6 +138,9 @@ namespace volePSI
 		setTimePoint("RsOpprfSender::send paxos solve");
 		
 		MC_AWAIT(chl.send(coproto::copy(mP)));
+
+			comm = chl.bytesSent() - comm;
+		std::cout << "OpprfSender::Send OKVS = " << comm << " bytes" << std::endl;
 
 		setTimePoint("RsOpprfSender::send end");
 
@@ -185,9 +194,12 @@ namespace volePSI
 			type = PaxosParam::Binary,
 			temp = std::move(BasicVector<block>{}),
 			oprfOutput = span<block> {},
-			p = Matrix<u8> {}
+			p = Matrix<u8> {},
 
+			comm = u64{}
 			);
+
+		comm = chl.bytesSent();
 		setTimePoint("RsOpprfReceiver::receive begin");
 
 		if (values.size() != outputs.rows())
@@ -227,9 +239,16 @@ namespace volePSI
 
 		MC_AWAIT(mOprfReceiver.receive(values, oprfOutput, prng, chl, numThreads));
 
+		comm = chl.bytesSent() - comm;
+		std::cout << "OpprfReceiver::Receive OPRF = " << comm << " bytes" << std::endl;
+
 		p.resize(paxos.size(), m, oc::AllocType::Uninitialized);
 		MC_AWAIT(chl.recv(p));
 		setTimePoint("RsOpprfReceiver::receive recv");
+
+		comm = chl.bytesSent() - comm;
+		std::cout << "OpprfReceiver::Receive OKVS = " << comm << " bytes" << std::endl;
+		
 		
 		if (m == sizeof(block))
 		{

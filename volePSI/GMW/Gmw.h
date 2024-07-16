@@ -12,7 +12,7 @@
 #ifdef VOLE_PSI_ENABLE_GMW
 
 #include "volePSI/GMW/Circuit.h"
-#include "volePSI/GMW/SilentTripleGen.h"
+#include "volePSI/GMW/SilentOteGen.h"
 #include <list>
 #include <cryptoTools/Network/Channel.h>
 #include <cryptoTools/Common/Matrix.h>
@@ -46,6 +46,8 @@ namespace volePSI
         BetaCircuit::LevelizeType mLevelize = BetaCircuit::LevelizeType::Reorder;
 
         u64 mN = 0, mNumOts = 0, mIdx;
+        u64 mOteBatchSize = 0;
+        u64 mNumThreads = 0;
         OtExtType mOtExtType;
         //u64 mBitCount;
         Matrix<block> mWords;
@@ -66,7 +68,8 @@ namespace volePSI
             BetaCircuit& cir,
             u64 numThreads, 
             u64 pIdx, 
-            block seed);
+            block seed,
+            u64 oteBatchSize = 1ull << 20);
 
         void setTriples(span<block> a, span<block> b, span<block> c, span<block> d)
         {
@@ -110,9 +113,8 @@ namespace volePSI
         oc::MatrixView<u8> getOutputView(u64 i);
         oc::MatrixView<u8> getMemView(BetaBundle& wires);
 
-        SilentTripleGen mSilent;
-        //IknpTripleGen mIknp;
-
+        SilentOteGen mSilent;
+        
         u64 numRounds()
         {
             return mNumRounds;
