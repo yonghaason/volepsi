@@ -1,4 +1,4 @@
-#include "PS_Tests.h"
+#include "Psu_Tests.h"
 #include "volePSI/Defines.h"
 #include "volePSI/Cpso.h"
 
@@ -7,7 +7,9 @@
 #include "cryptoTools/Circuit/BetaLibrary.h"
 #include "Common.h"
 #include "coproto/Socket/LocalAsyncSock.h"
+#include "coproto/Socket/AsioSocket.h"
 
+using namespace std;
 using namespace volePSI;
 using namespace oc;
 
@@ -16,7 +18,9 @@ void Psu_full_test(const oc::CLP &cmd)
 	CpsuSender sender;
 	CpsuReceiver recver;
 
-	auto sockets = cp::LocalAsyncSocket::makePair();
+	auto sockets = cp::AsioSocket::makePair();
+
+	cout << "connected" << std::endl;
 
 	u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
 	u64 nt = cmd.getOr("nt", 1);

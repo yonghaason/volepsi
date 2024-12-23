@@ -15,6 +15,7 @@
 #include "Benes_Tests.h"
 #include "PS_Tests.h"
 #include "Psu_Tests.h"
+#include "Pso_Tests.h"
 
 namespace volePSI_Tests
 {
@@ -46,6 +47,7 @@ namespace volePSI_Tests
         t.add("Psu_partial_test            ", Psu_partial_test);
         t.add("Psu_offline_test            ", Psu_offline_test);
 
+        t.add("Psi_card_partial_test       ", Pso_card_test);
 
         
 #ifdef VOLE_PSI_ENABLE_GMW

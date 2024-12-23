@@ -3,11 +3,12 @@
 #include "volePSI/RsPsi.h"
 #include "volePSI/RsCpsi.h"
 #include "volePSI/SimpleIndex.h"
+#include "coproto/Socket/AsioSocket.h"
 
 #include "libdivide.h"
 #include <unistd.h>
 using namespace oc;
-using namespace volePSI;;
+using namespace volePSI;
 
 void perfMod(oc::CLP& cmd)
 {
@@ -413,7 +414,8 @@ void perfPSI(oc::CLP& cmd)
 	recv.setTimer(r);
 	send.setTimer(s);
 
-	auto sockets = cp::LocalAsyncSocket::makePair();
+	// auto sockets = cp::LocalAsyncSocket::makePair();
+	auto sockets = coproto::AsioSocket::makePair();
 
 	for (u64 i = 0; i < t; ++i)
 	{

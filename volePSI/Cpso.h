@@ -12,14 +12,66 @@
 
 namespace volePSI
 {
-    enum class Operation 
+    class PsoReceiver : public details::RsCpsiBase, public oc::TimerAdapter
     {
-        Cardinality = 1,
-        Sum = 2,
-        InnerProduct = 3,
-        Union = 4,
-        PrivateID = 5
+        SilentOteGen mOtFactory;
+
+    public:
+        Proto setup(Socket& chl) {
+            auto cuckoo = oc::CuckooIndex<>();
+            cuckoo.init(mRecverSize, mSsp, 0, 3);
+            auto numBins = cuckoo.mBins.size();
+            auto keyBitLength = mSsp + oc::log2ceil(numBins);
+            u64 numTriples = 128 * oc::divCeil(numBins, 128) * (keyBitLength - 1) * 2;
+            mSetup = true;
+
+            mOtFactory.init(0, numTriples, mOteBatchSize, mNumThreads, Mode::Sender, mPrng.get());
+            MC_BEGIN(Proto, this, &chl);
+            MC_AWAIT(mOtFactory.generateBaseOts(0, mPrng, chl));
+            MC_AWAIT(mOtFactory.expand(chl));
+            setTimePoint("Setup::generate ROT & Triples");
+            MC_END();
+        }
+        Proto receiveCard(span<block> X, u64& cardinality, Socket& chl);
+
+        // Proto receiveSum(span<block> X, block sum, Socket& chl);
+
+        // Proto receiveThreshold(span<block> X, block sum, Socket& chl);
+
+        // Proto receiveInnerProd(span<block> X, block sum, Socket& chl);
+
     };
+
+    class PsoSender : public details::RsCpsiBase, public oc::TimerAdapter
+    {
+        SilentOteGen mOtFactory;
+
+    public:
+        Proto setup(Socket& chl) {
+            auto cuckoo = oc::CuckooIndex<>();
+            cuckoo.init(mRecverSize, mSsp, 0, 3);
+            auto numBins = cuckoo.mBins.size();
+            auto keyBitLength = mSsp + oc::log2ceil(numBins);
+            u64 numTriples = 128 * oc::divCeil(numBins, 128) * (keyBitLength - 1) * 2;
+            mSetup = true;
+            
+            mOtFactory.init(0, numTriples, mOteBatchSize, mNumThreads, Mode::Receiver, mPrng.get());
+
+            MC_BEGIN(Proto, this, &chl);
+            MC_AWAIT(mOtFactory.generateBaseOts(1, mPrng, chl));
+            MC_AWAIT(mOtFactory.expand(chl));
+            setTimePoint("Setup::generate ROTs");
+            MC_END();            
+        }
+        Proto sendCard(span<block> Y, Socket& chl);
+
+        // Proto sendSum(span<block> Y, block sum, Socket& chl);
+
+        // Proto sendThreshold(span<block> Y, block sum, Socket& chl);
+
+        // Proto sendInnerProd(span<block> Y, block sum, Socket& chl);
+    };
+    
 
     class CpsuSender : public details::RsCpsiBase, public oc::TimerAdapter
     {
@@ -42,8 +94,7 @@ namespace volePSI
             MC_AWAIT(mOtFactory.generateBaseOts(1, mPrng, chl));
             MC_AWAIT(mOtFactory.expand(chl));
             setTimePoint("Setup::generate ROT & Triples");
-            MC_END();
-            
+            MC_END();            
         }
         Proto send(span<block> Y, Socket& chl);
     };
@@ -69,24 +120,8 @@ namespace volePSI
             MC_AWAIT(mOtFactory.expand(chl));
             setTimePoint("Setup::generate ROT & Triples");
             MC_END();
-
         }
         Proto receive(span<block> X, std::vector<block>& D, Socket& chl);
-    };
-
-    class PsoBase : public details::RsCpsiBase, oc::TimerAdapter
-    {
-    public:        
-        void init(
-            u64 senderSize,
-            u64 recverSize,
-            u64 valueByteLength,
-            u64 statSecParam,
-            block seed,
-            u64 numThreads,
-            Operation operation,
-            u64 oteBatchSize = (1ull << 20),
-            ValueShareType type = ValueShareType::Xor);
     };
 }
 
