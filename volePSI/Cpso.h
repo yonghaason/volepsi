@@ -34,11 +34,11 @@ namespace volePSI
         }
         Proto receiveCard(span<block> X, u64& cardinality, Socket& chl);
 
-        // Proto receiveSum(span<block> X, block sum, Socket& chl);
+        Proto receiveSum(span<block> X, u64& sum, Socket& chl);
 
         // Proto receiveThreshold(span<block> X, block sum, Socket& chl);
 
-        // Proto receiveInnerProd(span<block> X, block sum, Socket& chl);
+        Proto receiveInnerProd(span<block> X, span<u64> data, u64& innerprod, Socket& chl);
 
     };
 
@@ -65,11 +65,11 @@ namespace volePSI
         }
         Proto sendCard(span<block> Y, Socket& chl);
 
-        // Proto sendSum(span<block> Y, block sum, Socket& chl);
+        Proto sendSum(span<block> Y, span<u64> data, Socket& chl);
 
         // Proto sendThreshold(span<block> Y, block sum, Socket& chl);
 
-        // Proto sendInnerProd(span<block> Y, block sum, Socket& chl);
+        Proto sendInnerProd(span<block> Y, span<u64> data, Socket& chl);
     };
     
 

@@ -12,10 +12,13 @@ namespace volePSI
                  s = RsCpsiReceiver::Sharing{},
                  cpsiReceiver = std::make_unique<RsCpsiReceiver>(),
                  finalOtSender = std::make_unique<oc::SilentOtExtSender>(),
-                 finalOtMsgs = std::vector<std::array<oc::block, 2>>{},
+                 randMsgs = std::vector<std::array<oc::block, 2>>{},
+                 finalSendMsgs = oc::Matrix<u8>{},
+                 finalSendMsgsIter = oc::Matrix<u8>::iterator{},
                  i = u64{},
-                 r = oc::block{},
-                 sum = u64{}
+                 finalMsgByteLength = u64{},
+                 randAcc = u64{},
+                 tmp = u64{}
                  );
 
         assert(mSenderSize == Y.size());
@@ -32,29 +35,44 @@ namespace volePSI
 
         comm = chl.bytesSent() - comm;
 
-        // TODO: logn-bits 
-        finalOtMsgs.resize(s.mFlagBits.size());
-        sum = 0;
-        for (i = 1; i < s.mFlagBits.size(); i++)
-        {
-            r = mPrng.get();
-            finalOtMsgs[i][s.mFlagBits[i]] = r;
-            finalOtMsgs[i][!s.mFlagBits[i]] = oc::block(r.mData[1], r.mData[0] + 1);
-            sum += r.mData[0];
+        // Naive
+        // finalOtMsgs.resize(s.mFlagBits.size());
+        // sum = 0;
+        // for (i = 1; i < s.mFlagBits.size(); i++)
+        // {
+        //     r = mPrng.get();
+        //     finalOtMsgs[i][s.mFlagBits[i]] = r;
+        //     finalOtMsgs[i][!s.mFlagBits[i]] = oc::block(r.mData[1], r.mData[0] + 1);
+        //     sum += r.mData[0];
+        // }
+        // r = mPrng.get();
+        // finalOtMsgs[0][s.mFlagBits[0]] = oc::block(r.mData[1], -sum);
+        // finalOtMsgs[0][!s.mFlagBits[0]] = oc::block(r.mData[1], -sum+1);
+        // finalOtSender->configure(s.mFlagBits.size(), 2, mNumThreads);
+        // MC_AWAIT(finalOtSender->sendChosen(finalOtMsgs, mPrng, chl));
+        //
+
+        ////////////////
+        randMsgs.resize(s.mFlagBits.size());
+        MC_AWAIT(finalOtSender->send(randMsgs, mPrng, chl));
+        finalMsgByteLength = oc::divCeil(oc::log2ceil(s.mFlagBits.size()), 8);
+        finalSendMsgs.resize(s.mFlagBits.size()+1, finalMsgByteLength, oc::AllocType::Uninitialized);
+        finalSendMsgsIter = finalSendMsgs.begin();
+        randAcc = 0;
+        for (i = 0; i < s.mFlagBits.size(); i++) 
+        {            
+            tmp = randMsgs[i][0].mData[0] + randMsgs[i][1].mData[0] 
+                    + (u64) s.mFlagBits[i];
+            randAcc += (u64) s.mFlagBits[i] + 2*randMsgs[i][0].mData[0];
+            memcpy(&*finalSendMsgsIter, &tmp, finalMsgByteLength);
+            finalSendMsgsIter += finalMsgByteLength; 
         }
-        r = mPrng.get();
-        finalOtMsgs[0][s.mFlagBits[0]] = oc::block(r.mData[1], -sum);
-        finalOtMsgs[0][!s.mFlagBits[0]] = oc::block(r.mData[1], -sum+1);
-
-        finalOtSender->configure(s.mFlagBits.size(), 2, mNumThreads);
-        
-        // TODO: Optimize by send "correlated"
-        MC_AWAIT(finalOtSender->sendChosen(finalOtMsgs, mPrng, chl));
-
+        memcpy(&*finalSendMsgsIter, &randAcc, finalMsgByteLength);
+        MC_AWAIT(chl.send(std::move(finalSendMsgs)));
         
         setTimePoint("PsoSender::Final OT send");  
         comm = chl.bytesSent() - comm;
-        commexp = (u64) 2*sizeof(block) * finalOtMsgs.size();
+        commexp = (u64) finalMsgByteLength * s.mFlagBits.size();
         std::cout << "PsoSender::FinalOT = " << comm << " bytes / expected: " << commexp << " bytes" << std::endl;
 
         MC_END();
@@ -66,8 +84,14 @@ namespace volePSI
                  s = RsCpsiSender::Sharing{},
                  cpsiSender = std::make_unique<RsCpsiSender>(),
                  finalOtReceiver = std::make_unique<oc::SilentOtExtReceiver>(),
-                 finalOtMsgs = std::vector<block>{},
-                 i = u64{}
+                 randMsgs = std::vector<oc::block>{},
+                 finalRecvMsgs = oc::Matrix<u8>{},
+                 finalRecvMsgsIter = oc::Matrix<u8>::iterator{},
+                 randChoice = oc::BitVector{},
+                 i = u64{},
+                 finalMsgByteLength = u64{},
+                 tmp = u64{},
+                 acc = u64{}
                 );
         assert(mReceiverSize == X.size());
 
@@ -83,18 +107,43 @@ namespace volePSI
 
         comm = chl.bytesSent() - comm;
 
-        finalOtMsgs.resize(s.mFlagBits.size());
-        
-        finalOtReceiver->configure(s.mFlagBits.size(), 2, mNumThreads);
-        MC_AWAIT(finalOtReceiver->receiveChosen(s.mFlagBits, finalOtMsgs, mPrng, chl));
+        // Naive
+        // finalOtMsgs.resize(s.mFlagBits.size());
+        // finalOtReceiver->configure(s.mFlagBits.size(), 2, mNumThreads);
+        // MC_AWAIT(finalOtReceiver->receive(s.mFlagBits, finalOtMsgs, mPrng, chl));
+        // cardinality = 0;
+        // for (i = 0; i < finalOtMsgs.size(); i++) {
+        //     cardinality += finalOtMsgs[i].mData[0];
+        // }
+        //
 
-    
-        cardinality = 0;
-        for (i = 0; i < finalOtMsgs.size(); i++) {
-            cardinality += finalOtMsgs[i].mData[0];
+        randMsgs.resize(s.mFlagBits.size());
+        randChoice.resize(s.mFlagBits.size());
+        randChoice.randomize(mPrng);
+        MC_AWAIT(finalOtReceiver->receive(s.mFlagBits, randMsgs, mPrng, chl));
+        finalMsgByteLength = oc::divCeil(oc::log2ceil(s.mFlagBits.size()), 8);
+        finalRecvMsgs.resize(s.mFlagBits.size()+1, finalMsgByteLength, oc::AllocType::Uninitialized);
+        MC_AWAIT(chl.recv(finalRecvMsgs));
+
+        finalRecvMsgsIter = finalRecvMsgs.begin();
+        acc = 0;
+        tmp = 0;
+        for (i = 0; i < s.mFlagBits.size(); i++) 
+        {
+            if (!s.mFlagBits[i]) {
+                acc += (u64) s.mFlagBits[i] - 2*randMsgs[i].mData[0];
+            }
+            else {
+                memcpy(&tmp, &*finalRecvMsgsIter, finalMsgByteLength);
+                acc += (u64) s.mFlagBits[i] - 2*(tmp - randMsgs[i].mData[0]);                
+            }            
+            finalRecvMsgsIter += finalMsgByteLength;
         }
-
-        setTimePoint("PsoReceiver::Final OT recv");     
+        memcpy(&tmp, &*finalRecvMsgsIter, finalMsgByteLength);
+        acc += tmp;
+        cardinality = acc % (1 << (finalMsgByteLength*8));
+    
+        setTimePoint("PsoReceiver::Final OT recv");
         comm = chl.bytesSent() - comm;
         commexp = 0;
         std::cout << "PsoReceiver::FinalOT = " << comm << " bytes / expected: " << commexp << " bytes" << std::endl;
@@ -166,9 +215,6 @@ namespace volePSI
             }
         }        
         
-        // if (mTimer) {
-        //     finalOtSender->setTimer(*mTimer);
-        // }
         finalOtSender->configure(perm.size(), 2, mNumThreads);
         MC_AWAIT(finalOtSender->sendChosen(finalOtMsgs, mPrng, chl));
 

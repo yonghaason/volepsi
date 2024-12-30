@@ -77,6 +77,8 @@ void Pso_card_test(const oc::CLP &cmd)
 	std::cout << timer << std::endl;
 	std::cout <<"Sender Timer\n" << s << "\nReceiver Timer\n" << r << std::endl;
 
+	// std::cout << cardinality << " / " << exp.size() << std::endl;
+
 	if (cardinality != exp.size())
 		throw RTE_LOC;
 }
