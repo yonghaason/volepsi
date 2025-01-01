@@ -14,7 +14,6 @@
 void SilentOteGen_test(const oc::CLP& cmd);
 void baseOT_Test(const oc::CLP& cmd);
 
-
 void Gmw_half_test(const oc::CLP& cmd);
 void Gmw_basic_test(const oc::CLP& cmd);
 void Gmw_inOut_test(const oc::CLP& cmd);
@@ -27,5 +26,6 @@ void Gmw_aa_na_and_test(const oc::CLP& cmd);
 
 void Gmw_add_test(const oc::CLP& cmd);
 void Gmw_noLevelize_test(const oc::CLP& cmd);
+void Gmw_thr_test(const oc::CLP& cmd);
 
 #endif

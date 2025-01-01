@@ -9,12 +9,14 @@
 #include "cryptoTools/Crypto/PRNG.h"
 #include "cryptoTools/Network/Channel.h"
 #include "cryptoTools/Common/Timer.h"
+#include "cryptoTools/Circuit/BetaLibrary.h"
 
 namespace volePSI
 {
     class PsoReceiver : public details::RsCpsiBase, public oc::TimerAdapter
     {
         SilentOteGen mOtFactory;
+        oc::BetaLibrary lib;
 
     public:
         Proto setup(Socket& chl) {
@@ -32,11 +34,12 @@ namespace volePSI
             setTimePoint("Setup::generate ROT & Triples");
             MC_END();
         }
-        Proto receiveCard(span<block> X, u64& cardinality, Socket& chl);
 
-        Proto receiveSum(span<block> X, u64& sum, Socket& chl);
+        Proto receiveCardinality(span<block> X, u64& cardinality, Socket& chl);
 
-        // Proto receiveThreshold(span<block> X, block sum, Socket& chl);
+        Proto receiveSum(span<block> X, block& sum, Socket& chl);
+
+        Proto receiveThreshold(span<block> X, bool& res, const u64 threshold, Socket& chl);
 
         Proto receiveInnerProd(span<block> X, span<u64> data, u64& innerprod, Socket& chl);
 
@@ -45,6 +48,7 @@ namespace volePSI
     class PsoSender : public details::RsCpsiBase, public oc::TimerAdapter
     {
         SilentOteGen mOtFactory;
+        oc::BetaLibrary lib;
 
     public:
         Proto setup(Socket& chl) {
@@ -63,11 +67,12 @@ namespace volePSI
             setTimePoint("Setup::generate ROTs");
             MC_END();            
         }
-        Proto sendCard(span<block> Y, Socket& chl);
 
-        Proto sendSum(span<block> Y, span<u64> data, Socket& chl);
+        Proto sendCardinality(span<block> Y, Socket& chl);
 
-        // Proto sendThreshold(span<block> Y, block sum, Socket& chl);
+        Proto sendSum(span<block> Y, span<block> vals, Socket& chl);
+
+        Proto sendThreshold(span<block> Y, Socket& chl);
 
         Proto sendInnerProd(span<block> Y, span<u64> data, Socket& chl);
     };

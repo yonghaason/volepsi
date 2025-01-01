@@ -48,6 +48,8 @@ namespace volePSI_Tests
         t.add("Psu_offline_test            ", Psu_offline_test);
 
         t.add("Psi_card_partial_test       ", Pso_card_test);
+        t.add("Psi_sum_partial_test        ", Pso_sum_test);
+        t.add("Psi_thr_partial_test        ", Pso_thres_test);
 
         
 #ifdef VOLE_PSI_ENABLE_GMW
@@ -66,7 +68,9 @@ namespace volePSI_Tests
         // t.add("Gmw_xor_and_test            ", Gmw_xor_and_test);
         // t.add("Gmw_aa_na_and_test          ", Gmw_aa_na_and_test);
         // t.add("Gmw_noLevelize_test         ", Gmw_noLevelize_test);
-        // t.add("Gmw_add_test                ", Gmw_add_test);
+        t.add("Gmw_add_test                ", Gmw_add_test);
+        t.add("Gmw_thr_test                ", Gmw_thr_test);
+
 #endif
 
         // t.add("RsOprf_eval_test            ", RsOprf_eval_test);

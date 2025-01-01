@@ -8,6 +8,7 @@
 #include "cryptoTools/Circuit/BetaLibrary.h"
 #include "Common.h"
 #include "coproto/Socket/LocalAsyncSock.h"
+#include <bitset>
 
 #include <unistd.h>
 
@@ -788,7 +789,6 @@ void Gmw_aa_na_and_test(const oc::CLP& cmd)
     }
 }
 
-
 void Gmw_add_test(const oc::CLP& cmd)
 {
     oc::BetaLibrary lib;
@@ -818,7 +818,6 @@ void Gmw_add_test(const oc::CLP& cmd)
     gmw0.init(n, *addCir, 1, 0, oc::ZeroBlock);
     gmw1.init(n, *addCir, 1, 1, oc::OneBlock);
 
-
     gmw0.setInput(0, sin0[0]);
     gmw0.setInput(1, sin1[0]);
     gmw1.setInput(0, sin0[1]);
@@ -845,8 +844,8 @@ void Gmw_add_test(const oc::CLP& cmd)
             throw RTE_LOC;
         }
     }
-
 }
+
 void Gmw_noLevelize_test(const oc::CLP& cmd)
 {
     oc::BetaLibrary lib;
@@ -903,7 +902,97 @@ void Gmw_noLevelize_test(const oc::CLP& cmd)
             throw RTE_LOC;
         }
     }
+}
 
+void printAsBinary(uint8_t value) {
+    // Use std::bitset to convert the uint8_t value to an 8-bit binary string
+    std::bitset<8> binary(value);
+    std::cout << binary << std::endl;
+}
+
+void Gmw_thr_test(const oc::CLP& cmd)
+{
+    oc::BetaLibrary lib;
+
+    u64 bitlen = 12;
+    u64 bytelen = oc::divCeil(bitlen, 8);
+
+    auto addCir = lib.int_int_add(bitlen, bitlen, bitlen);
+    
+    auto sockets = LocalAsyncSocket::makePair();
+
+    Gmw gmw0, gmw1;
+    block seed = oc::toBlock(cmd.getOr<u64>("s", 0));
+    oc::PRNG prng(seed);
+
+    u64 n = 1;
+
+    Matrix<u8> in0(n, bytelen), in1(n, bytelen), out(n, bytelen);
+    std::array<Matrix<u8>, 2> sadd;
+    sadd[0].resize(n, bytelen);
+    sadd[1].resize(n, bytelen);
+
+    auto a = prng.get<u64>() % (1ull<<bitlen);
+    auto b = prng.get<u64>() % (1ull<<bitlen);
+
+    memcpy(in0[0].data(), &a, bytelen);
+    memcpy(in1[0].data(), &b, bytelen);
+    
+    gmw0.init(n, *addCir, 1, 0, oc::ZeroBlock);
+    gmw1.init(n, *addCir, 1, 1, oc::OneBlock);
+
+    gmw0.setInput(0, in0);
+    gmw0.setInput(1, Matrix<u8>(n, bytelen));
+    
+    gmw1.setInput(0, Matrix<u8>(n, bytelen));
+    gmw1.setInput(1, in1);
+
+    auto p0 = gmw0.run(sockets[0]); 
+    auto p1 = gmw1.run(sockets[1]);
+    eval(p0, p1);
+    
+    gmw0.getOutput(0, sadd[0]);
+    gmw1.getOutput(0, sadd[1]);
+
+    std::cout << "Add: ";
+    for (size_t i = 0; i < bytelen; i++) 
+    {
+        std::cout << std::bitset<8>(sadd[0][0][bytelen - 1 - i] ^ sadd[1][0][bytelen - 1 - i]);
+    }
+    std::cout << std::endl;
+
+    auto gtrCir = lib.int_int_gteq(bitlen, bitlen);
+    auto thr = prng.get<u64>() % (1ull<<bitlen);
+
+    Matrix<u8> inthr(n, bytelen);
+    memcpy(inthr[0].data(), &thr, bytelen);
+
+    gmw0.init(n, *gtrCir, 1, 0, oc::ZeroBlock);
+    gmw1.init(n, *gtrCir, 1, 1, oc::OneBlock);
+    
+    gmw0.setInput(0, sadd[0]);
+    gmw0.setInput(1, inthr);
+
+    gmw1.setInput(0, sadd[1]);
+    gmw1.setInput(1, Matrix<u8>(n, bytelen));
+
+    p0 = gmw0.run(sockets[0]); 
+    p1 = gmw1.run(sockets[1]);
+    eval(p0, p1);
+
+    std::array<Matrix<u8>, 2> sthr;
+    sthr[0].resize(n, 1);
+    sthr[1].resize(n, 1);
+    
+    gmw0.getOutput(0, sthr[0]);
+    gmw1.getOutput(0, sthr[1]);
+
+    std::cout << "Thr out: ";
+    std::cout << std::bitset<8>(sthr[0][0][0] ^ sthr[1][0][0]);
+    std::cout << std::endl;
+
+    std::cout << "a, b, t: " << a << ", " << b << ", " << thr << ", " << std::endl;
+    std::cout << "a + b: " << (a + b) % (1 << bitlen) << std::endl;
 }
 
 
