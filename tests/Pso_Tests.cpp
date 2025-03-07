@@ -428,7 +428,7 @@ void Pso_innerprod_32_test(const oc::CLP &cmd)
 	prng.get(senderSet.data(), n);
 	// prng.get(senderValue.data(), n);
 
-	for (u64 i = 0; i < 100; ++i) 
+	for (u64 i = 0; i < n; ++i) 
 	{
 		senderValue[i] = i;
 		receiverValue[i] = -i;

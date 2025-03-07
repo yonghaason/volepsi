@@ -539,10 +539,6 @@ namespace volePSI
                  msChoices = oc::BitVector{},
                  msOtMsgs = std::vector<int32_t>{},
                  
-                 // For Debug
-                 clearSharesTheir = std::vector<int32_t>{},
-                 // For Debug
-
                  r = int32_t{},
                  tmp = int32_t{},
                  i = u64{},
@@ -589,25 +585,21 @@ namespace volePSI
         }
         setTimePoint("PsoSender::InnerProd::Clear out");
 
-        
-
         // MultShare
         invMapping.resize(s.mFlagBits.size(), ~u64(0));
         for (i = 0; i < Y.size(); i++) {
             invMapping[s.mMapping[i]] = i;
         }
 
-        tmp = 1;
+        tmp = 0;
         reordered_data.resize(s.mFlagBits.size());
         for (i = 0; i < s.mFlagBits.size(); i++) 
         {   
             if (invMapping[i] != ~u64(0)) {
                 reordered_data[i] = (data[invMapping[i]]);
-                // msChoices.append(reinterpret_cast<u8*>(&data[invMapping[i]]), sizeof(int32_t)*8);
             }
             else {
                 reordered_data[i] = tmp;
-                // msChoices.append(reinterpret_cast<u8*>(&tmp), sizeof(int32_t)*8);
             }
         }
         msChoices = oc::BitVector((u8*) reordered_data.data(), s.mFlagBits.size() * 32);
@@ -620,16 +612,16 @@ namespace volePSI
 
         msOtMsgs.resize(msChoices.size());
         MC_AWAIT(chl.recv(msOtMsgs));
+
+        innerProdShare = 0;
         for (i = 0; i < s.mFlagBits.size(); i++)
         {   
             if (invMapping[i] != ~u64(0))
                 innerProdShare += clearShares[i] * data[invMapping[i]];
-            else
-                innerProdShare += clearShares[i];
-
+            
             for (j = 0; j < 32; j++)
             {
-                if (!msChoices[32*i + j])
+                if (msChoices[32*i + j])
                     innerProdShare += msOtMsgs[32*i + j] - msRotMsgs[32*i + j].mData[0];
                 else 
                     innerProdShare += msRotMsgs[32*i + j].mData[0];
@@ -707,21 +699,19 @@ namespace volePSI
         MC_AWAIT(rot2Sender->send(rot2Msgs, mPrng, chl));
 
         ot2Msgs.resize(s.mFlagBits.size());
+
         for (i = 0; i < s.mFlagBits.size(); i++)
         {
             r = mPrng.get<int32_t>();
             memcpy(&tmp, s.mValues[i].data(), sizeof(int32_t));
             ot2Msgs[i][s.mFlagBits[i]] = rot2Msgs[i][s.mFlagBits[i]].mData[0] + r;
             ot2Msgs[i][!s.mFlagBits[i]] = rot2Msgs[i][!s.mFlagBits[i]].mData[0] + r + tmp;
-            clearShares[i] += r;
+            clearShares[i] -= r;
         }
 
         MC_AWAIT(chl.send(ot2Msgs));
 
         setTimePoint("PsoReceiver::InnerProd::Clear out");
-
-        MC_AWAIT(chl.send(ot2Msgs));
-
 
         // MultShare
         msRotMsgs.resize(s.mFlagBits.size() * 32);
