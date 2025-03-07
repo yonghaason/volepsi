@@ -6,6 +6,8 @@
 #include "cryptoTools/Network/IOService.h"
 #include "Common.h"
 
+#include <map>
+
 using coproto::LocalAsyncSocket;
 using namespace oc;
 using namespace volePSI;
@@ -19,7 +21,7 @@ namespace
         std::vector<block>& sendSet,
         u64 byteLength,
         u64 nt = 1,
-        u64 oteBatchSize = (1ull << 20),
+        u64 oteBatchSize = (1ull << 25),
         ValueShareType type = ValueShareType::Xor)
     {
 
@@ -32,10 +34,24 @@ namespace
         Timer timer, s, r;
 
         oc::Matrix<u8> senderValues(sendSet.size(), byteLength);
-        std::memcpy(senderValues.data(), sendSet.data(), sendSet.size() * byteLength);
+        oc::Matrix<u32> senderValues32(sendSet.size(), byteLength / sizeof(u32));
+        if (type == ValueShareType::Xor && byteLength == 16) {
+            std::memcpy(senderValues.data(), sendSet.data(), sendSet.size() * byteLength);
+        }
+        else {            
+            // prng.get<u32>(senderValues32.data(), senderValues32.size());
 
-        recver.init(sendSet.size(), recvSet.size(), byteLength, 40, prng.get(), nt, oteBatchSize);
-        sender.init(sendSet.size(), recvSet.size(), byteLength, 40, prng.get(), nt, oteBatchSize);
+            for (size_t i = 0; i < sendSet.size(); i++) {
+                for (size_t j = 0; j < byteLength/sizeof(u32); j++) {
+                    senderValues32[i][j] = i + 500;
+                }
+            }
+            
+            std::memcpy(senderValues.data(), (u8*) senderValues32.data(), sendSet.size() * byteLength);
+        }
+
+        recver.init(sendSet.size(), recvSet.size(), byteLength, 40, prng.get(), nt, oteBatchSize, type);
+        sender.init(sendSet.size(), recvSet.size(), byteLength, 40, prng.get(), nt, oteBatchSize, type);
 
         RsCpsiReceiver::Sharing rShare;
         RsCpsiSender::Sharing sShare;
@@ -52,49 +68,69 @@ namespace
 
         timer.setTimePoint("end");
 
-        std::cout << "Total Comm: " 
-            << sockets[0].bytesSent() 
-            << " + " << sockets[1].bytesSent() 
-            << " = " << (sockets[0].bytesSent() + sockets[1].bytesSent())
-            << " bytes" << std::endl;
+        // std::cout << "Total Comm " 
+		// 	// << sockets[0].bytesSent() 
+		// 	// << " + " << sockets[1].bytesSent() 
+		// 	<< " = " << (float) (sockets[0].bytesSent() + sockets[1].bytesSent()) / (1 << 20)
+		// 	<< " MB" << std::endl;
 
-        std::cout << timer << std::endl;
         // std::cout <<"s\n" << s << "\nr" << r << std::endl;
 
-        bool failed = false;
+        
         std::vector<u64> intersection;
-        for (u64 i = 0; i < recvSet.size(); ++i)
+        if (byteLength == 16 && type == ValueShareType::Xor)
         {
-            auto k = rShare.mMapping[i];
+            std::map<block, block> sender_kv;
+            for (size_t i = 0 ; i < sendSet.size(); i++) {
+                sender_kv.insert({sendSet[i], *(block*)&senderValues(i, 0)});
+            }
+            bool failed = false;
 
-            if (rShare.mFlagBits[k] ^ sShare.mFlagBits[k])
+            for (u64 i = 0; i < recvSet.size(); ++i)
             {
-                intersection.push_back(i);
+                auto k = rShare.mMapping[i];
 
-                if (byteLength == 16) {
-                    if (type == ValueShareType::Xor)
+                if (rShare.mFlagBits[k] ^ sShare.mFlagBits[k])
+                {
+                    intersection.push_back(i);
+
+                    auto rv = *(block*)&rShare.mValues(k, 0);
+                    auto sv = *(block*)&sShare.mValues(k, 0);
+                    auto act = (rv ^ sv);
+                    if (sender_kv[recvSet[i]] != act)
                     {
-                        auto rv = *(block*)&rShare.mValues(k, 0);
-                        auto sv = *(block*)&sShare.mValues(k, 0);
-                        auto act = (rv ^ sv);
-                        if (recvSet[i] != act)
-                        {
-                            if(!failed)
-                                std::cout << i << " ext " << recvSet[i] << ", act " << act << " = " << rv << " " << sv << std::endl;
-                            failed = true;
-                            throw RTE_LOC;
-                        }
+                        if(!failed)
+                            std::cout << i << ": ext " << sender_kv[recvSet[i]] << ", act " << act << " = " << rv << " " << sv << std::endl;
+                        failed = true;
+                        throw RTE_LOC;
                     }
-                    else
+                }
+            }
+        }
+        else 
+        {
+            std::map<block, std::vector<u32>> sender_kv;
+            for (size_t i = 0 ; i < sendSet.size(); i++) {
+                std::vector<u32> items(senderValues32[i].data(), senderValues32[i].data() + byteLength/sizeof(u32));
+                sender_kv.insert({sendSet[i], items});
+            }
+
+            for (u64 i = 0; i < recvSet.size(); ++i)
+            {
+                auto k = rShare.mMapping[i];
+
+                if (rShare.mFlagBits[k] ^ sShare.mFlagBits[k])
+                {
+                    intersection.push_back(i);
                     {
-
-                        for (u64 j = 0; j < 4; ++j)
+                        for (u64 j = 0; j < byteLength / sizeof(u32); ++j)
                         {
-                            auto rv = (u32*)&rShare.mValues(i, 0);
-                            auto sv = (u32*)&sShare.mValues(i, 0);
+                            auto rv = (u32*)&rShare.mValues(k, 0);
+                            auto sv = (u32*)&sShare.mValues(k, 0);
 
-                            if (recvSet[i].get<u32>(j) != (sv[j] + rv[j]))
+                            if (sender_kv[recvSet[i]][j] != (rv[j] + sv[j]))
                             {
+                                std::cout << i << ": exp " << sender_kv[recvSet[i]][j] << ", act = " << rv[j] + sv[j] << std::endl;
                                 throw RTE_LOC;
                             }
                         }
@@ -102,7 +138,6 @@ namespace
                 }
             }
         }
-
 
         return intersection;
     }
@@ -113,7 +148,7 @@ void Cpsi_Rs_empty_test(const CLP& cmd)
 {
     u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
     u64 byteLength = cmd.getOr("bytelen", 16);
-    u64 oteBatchSize = 1ull << cmd.getOr("logotbatch", 20);
+    u64 oteBatchSize = 1ull << cmd.getOr("logbs", 20);
     std::vector<block> recvSet(n), sendSet(n);
     PRNG prng(ZeroBlock);
     prng.get(recvSet.data(), recvSet.size());
@@ -130,7 +165,7 @@ void Cpsi_Rs_partial_test(const CLP& cmd)
 {
     u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
     u64 byteLength = cmd.getOr("bytelen", 16);
-    u64 oteBatchSize = 1ull << cmd.getOr("logotbatch", 20);
+    u64 oteBatchSize = 1ull << cmd.getOr("logbs", 20);
     std::vector<block> recvSet(n), sendSet(n);
     std::random_device rd;
     std::default_random_engine gen(rd());
@@ -170,11 +205,14 @@ void Cpsi_Rs_full_test(const CLP& cmd)
 {
     u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
     u64 byteLength = cmd.getOr("bytelen", 16);
-    u64 oteBatchSize = 1ull << (cmd.getOr("logotbatch", 20));
+    u64 oteBatchSize = 1ull << (cmd.getOr("logbs", 20));
     std::vector<block> recvSet(n), sendSet(n);
     PRNG prng(ZeroBlock);
     prng.get(recvSet.data(), recvSet.size());
-    sendSet = recvSet;
+    for (size_t i = 0; i < sendSet.size(); i++) 
+    {
+        sendSet[i] = recvSet[recvSet.size() - 1 - i];
+    }
 
     std::set<u64> exp;
     for (u64 i = 0; i < n; ++i)
@@ -191,7 +229,7 @@ void Cpsi_Rs_full_asym_test(const CLP& cmd)
     u64 ns = cmd.getOr("ns", 2432);
     u64 nr = cmd.getOr("nr", 212);
     u64 byteLength = cmd.getOr("bytelen", 16);
-    u64 oteBatchSize = 1ull << cmd.getOr("logotbatch", 20);
+    u64 oteBatchSize = 1ull << cmd.getOr("logbs", 20);
     std::vector<block> recvSet(nr), sendSet(ns);
     PRNG prng(ZeroBlock);
     prng.get(recvSet.data(), recvSet.size());
@@ -205,26 +243,29 @@ void Cpsi_Rs_full_asym_test(const CLP& cmd)
     auto inter = runCpsi(prng, recvSet, sendSet, byteLength, 1, oteBatchSize);
     std::set<u64> act(inter.begin(), inter.end());
     if (act != exp)
-        throw RTE_LOC;
+        throw RTE_LOC;    
 }
-
-
-
 
 void Cpsi_Rs_full_add32_test(const CLP& cmd)
 {
-    //u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
-    //std::vector<block> recvSet(n), sendSet(n);
-    //PRNG prng(ZeroBlock);
-    //prng.get(recvSet.data(), recvSet.size());
-    //sendSet = recvSet;
+    u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
+    u64 byteLength = cmd.getOr("bytelen", 16);
+    u64 oteBatchSize = 1ull << cmd.getOr("logbs", 20);
 
-    //std::set<u64> exp;
-    //for (u64 i = 0; i < n; ++i)
-    //    exp.insert(i);
+    std::vector<block> recvSet(n), sendSet(n);
+    PRNG prng(ZeroBlock);
+    prng.get(recvSet.data(), recvSet.size());
+    for (size_t i = 0; i < sendSet.size(); i++) 
+    {
+        sendSet[i] = recvSet[recvSet.size() - 1 - i];
+    }
+    
+    std::set<u64> exp;
+    for (u64 i = 0; i < n; ++i)
+       exp.insert(i);
 
-    //auto inter = runCpsi(prng, recvSet, sendSet, byteLength, 1, ValueShareType::add32);
-    //std::set<u64> act(inter.begin(), inter.end());
-    //if (act != exp)
-    //    throw RTE_LOC;
+    auto inter = runCpsi(prng, recvSet, sendSet, byteLength, 1, oteBatchSize, ValueShareType::add32);
+    std::set<u64> act(inter.begin(), inter.end());
+    if (act != exp)
+       throw RTE_LOC;
 }

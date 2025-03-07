@@ -128,7 +128,7 @@ namespace volePSI
     void Gmw::implSetInput(u64 i, oc::MatrixView<u8> input, u64 alignment)
     {
         oc::MatrixView<u8> memView = getInputView(i);
-
+        
         auto numWires = memView.rows();
 
         auto bits = alignment * 8;
@@ -175,15 +175,15 @@ namespace volePSI
 
         mRoundIdx = 0;
 
-        comm = chl.bytesSent();
+        // comm = chl.bytesSent();
 
         for (i = 0; i < numRounds(); ++i)
             MC_AWAIT(roundFunction(chl));
 
-        comm = chl.bytesSent() - comm;
-        if (mIdx) std::cout << "GMWReceiver::";
-        else std::cout << "GMWSender::";
-        std::cout << "Online takes " << comm << " bytes" << std::endl;
+        // comm = chl.bytesSent() - comm;
+        // if (mIdx) std::cout << "GMWReceiver::";
+        // else std::cout << "GMWSender::";
+        // std::cout << "Online takes " << comm << " bytes" << std::endl;
 
         mA = {};
         mB = {};

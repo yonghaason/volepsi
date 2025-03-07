@@ -13,6 +13,46 @@ using namespace std;
 using namespace volePSI;
 using namespace oc;
 
+
+void Psu_setup_test(const oc::CLP &cmd)
+{
+	CpsuSender sender;
+	CpsuReceiver recver;
+
+	Timer timer, s, r;
+
+	auto sockets = cp::AsioSocket::makePair();
+
+	u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
+	u64 nt = cmd.getOr("nt", 1);
+
+	recver.init(n, n, 0, 40, block(0, 0), nt);
+	sender.init(n, n, 0, 40, block(0, 1), nt);
+
+	recver.setTimer(r);
+	sender.setTimer(s);
+
+	auto p0 = sender.setup(sockets[0]);
+	auto p1 = recver.setup(sockets[1]);
+
+	timer.setTimePoint("start");
+	r.setTimePoint("start");
+	s.setTimePoint("start");
+
+	eval(p0, p1);
+
+	timer.setTimePoint("end");
+
+	std::cout << "Total Comm: " 
+			// << sockets[0].bytesSent() 
+			// << " + " << sockets[1].bytesSent() 
+			<< " = " << (double) (sockets[0].bytesSent() + sockets[1].bytesSent()) / (1 << 20)
+			<< " MB" << std::endl;
+
+	std::cout << timer << std::endl;
+	std::cout <<"Sender Timer\n" << s << "\nReceiver Timer\n" << r << std::endl;
+}
+
 void Psu_full_test(const oc::CLP &cmd)
 {
 	CpsuSender sender;
@@ -56,7 +96,7 @@ void Psu_empty_test(const oc::CLP &cmd)
 	CpsuSender sender;
 	CpsuReceiver recver;
 
-	auto sockets = cp::LocalAsyncSocket::makePair();
+	auto sockets = cp::AsioSocket::makePair();
 
 	u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
 	u64 nt = cmd.getOr("nt", 1);
@@ -96,7 +136,7 @@ void Psu_partial_test(const oc::CLP &cmd)
 
 	Timer timer, s, r;
 
-	auto sockets = cp::LocalAsyncSocket::makePair();
+	auto sockets = cp::AsioSocket::makePair();
 
 	u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
 	u64 nt = cmd.getOr("nt", 1);
@@ -142,11 +182,11 @@ void Psu_partial_test(const oc::CLP &cmd)
 
 	timer.setTimePoint("end");
 
-	std::cout << "Total Comm: " 
-			<< sockets[0].bytesSent() 
-			<< " + " << sockets[1].bytesSent() 
-			<< " = " << (sockets[0].bytesSent() + sockets[1].bytesSent())
-			<< " bytes" << std::endl;
+	std::cout << "Total Comm " 
+			// << sockets[0].bytesSent() 
+			// << " + " << sockets[1].bytesSent() 
+			<< " = " << (float) (sockets[0].bytesSent() + sockets[1].bytesSent()) / (1 << 20)
+			<< " MB" << std::endl;
 
 	std::cout << timer << std::endl;
 	std::cout <<"Sender Timer\n" << s << "\nReceiver Timer\n" << r << std::endl;
@@ -165,7 +205,7 @@ void Psu_offline_test(const oc::CLP &cmd)
 	CpsuSender sender;
 	CpsuReceiver recver;
 
-	auto sockets = cp::LocalAsyncSocket::makePair();
+	auto sockets = cp::AsioSocket::makePair();
 
 	u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
 	u64 nt = cmd.getOr("nt", 1);
@@ -218,11 +258,11 @@ void Psu_offline_test(const oc::CLP &cmd)
 
 	timer.setTimePoint("end");
 
-	std::cout << "Total Comm: " 
-			<< sockets[0].bytesSent() 
-			<< " + " << sockets[1].bytesSent() 
-			<< " = " << (sockets[0].bytesSent() + sockets[1].bytesSent())
-			<< " bytes" << std::endl;
+	std::cout << "Total Comm " 
+			// << sockets[0].bytesSent() 
+			// << " + " << sockets[1].bytesSent() 
+			<< " = " << (float) (sockets[0].bytesSent() + sockets[1].bytesSent()) / (1 << 20)
+			<< " MB" << std::endl;
 
 	std::cout << timer << std::endl;
 	std::cout <<"Sender Timer\n" << s << "\nReceiver Timer\n" << r << std::endl;

@@ -169,8 +169,8 @@ void RsOpprf_eval_u8_mtx_test(const CLP& cmd)
 
     auto sockets = cp::LocalAsyncSocket::makePair();
 
-    u64 n = cmd.getOr("n", 4000);
-    u64 m = 7;
+    u64 n = cmd.getOr("n", 1ull << cmd.getOr("nn", 10));
+    u64 m = cmd.getOr("m", 7);
     std::random_device rd;
     std::default_random_engine gen(rd());
     std::uniform_int_distribution<u64> dis;
@@ -209,6 +209,12 @@ void RsOpprf_eval_u8_mtx_test(const CLP& cmd)
     }
     if (count)
         throw RTE_LOC;
+
+    std::cout << "Total Comm " 
+        // << sockets[0].bytesSent() 
+        // << " + " << sockets[1].bytesSent() 
+        << " = " << (float) (sockets[0].bytesSent() + sockets[1].bytesSent()) / (1 << 20)
+        << " MB" << std::endl;
 }
 
 void RsOpprf_partial_test(const CLP& cmd)

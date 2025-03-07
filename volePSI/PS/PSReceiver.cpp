@@ -10,7 +10,7 @@ namespace volePSI
 		this->mNumBenesColumns = 2 * mLogN - 1;
 		this->mNumThreads = numThreads;
 		mNumSwitches = mNumBenesColumns * (mN / 2);
-		setTimePoint("PSReceiver::initialize");
+		// setTimePoint("PSReceiver::initialize");
 	}
 
 	Proto PSReceiver::genOT(oc::PRNG &prng, Socket &chl)
@@ -49,7 +49,7 @@ namespace volePSI
 		sotMsgs.resize(mNumSwitches);
 		if (mRotSendMsgs.size() < mNumSwitches) {
 			MC_AWAIT(genOT(prng, chl)); // sample random ot blocks
-			setTimePoint("PSReceiver::send-OT");
+			// setTimePoint("PSReceiver::send-OT");
 		}
 		else {
 			mRotSendMsgs.resize(mNumSwitches);
@@ -57,7 +57,7 @@ namespace volePSI
 
 		bitCorrection.resize(mNumSwitches);
 		MC_AWAIT(chl.recv(bitCorrection));
-		setTimePoint("PSReceiver::receive-bitcorrection");
+		// setTimePoint("PSReceiver::receive-bitcorrection");
 
 		for (i = 0; i < mRotSendMsgs.size(); i++)
 		{
@@ -78,7 +78,7 @@ namespace volePSI
 		corrections.resize(mNumSwitches);
 		prepareCorrection(0, 0, masks, sotMsgs, corrections);
 		MC_AWAIT(chl.send(corrections));
-		setTimePoint("PSReceiver::compute-correction");
+		// setTimePoint("PSReceiver::compute-correction");
 
 		for (i = 0; i < mN; ++i)
 		{
@@ -300,6 +300,7 @@ namespace volePSI
 				 sotMsgs = std::vector<std::array<std::array<bool, 2>, 2>>{},
 				 bitCorrection = oc::BitVector{},
 				 corrections = std::vector<std::array<bool, 2>>{},
+				 corrections_bv = std::vector<oc::BitVector>{},
 				 temp = block{},
 				 i = u64{},
 				 aes = AES{oc::ZeroBlock});
@@ -313,17 +314,17 @@ namespace volePSI
 		sotMsgs.resize(mNumSwitches);
 		if (mRotSendMsgs.size() < mNumSwitches) {
 			MC_AWAIT(genOT(prng, chl)); // sample random ot blocks
-			setTimePoint("PSReceiver::send-OT");
+			// setTimePoint("PSReceiver::send-OT");
 		}
 		else {
 			mRotSendMsgs.resize(mNumSwitches);
 		}
 
-		std::cout << "psReceiver::genBase " << mRotSendMsgs.size() << std::endl;
+		// std::cout << "psReceiver::genBase " << mRotSendMsgs.size() << std::endl;
 		
 		bitCorrection.resize(mNumSwitches);
 		MC_AWAIT(chl.recv(bitCorrection));
-		setTimePoint("PSReceiver::receive-bitcorrection");
+		// setTimePoint("PSReceiver::receive-bitcorrection");
 
 		for (i = 0; i < mRotSendMsgs.size(); i++)
 		{
@@ -344,8 +345,20 @@ namespace volePSI
 
 		corrections.resize(mNumSwitches);
 		prepareCorrection(0, 0, masks, sotMsgs, corrections);
-		setTimePoint("PSReceiver::compute-correction");
-		MC_AWAIT(chl.send(corrections));
+
+		// MC_AWAIT(chl.send(corrections));
+
+		corrections_bv.resize(2);
+		corrections_bv[0].resize(mNumSwitches);
+		corrections_bv[1].resize(mNumSwitches);
+		for (i = 0; i < mNumSwitches; i++) 
+		{
+			corrections_bv[0][i] = corrections[i][0];
+			corrections_bv[1][i] = corrections[i][1];
+		}
+		MC_AWAIT(chl.send(corrections_bv[0]));
+		MC_AWAIT(chl.send(corrections_bv[1]));
+		
 		retMasks[1] = masks;
 		MC_END();
 	}

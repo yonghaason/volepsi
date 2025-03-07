@@ -19,68 +19,63 @@ using PRNG = oc::PRNG;
 
 void SilentOteGen_test(const oc::CLP& cmd)
 {
-
-    u64 n = cmd.getOr("n", 4832);
-    u64 bs = cmd.getOr("bs", 1ull << 20);
+    u64 numot = cmd.getOr("numot", 14988321);
+    u64 numtri = cmd.getOr("numtri", 4358972139);
+    u64 bs = 1ull << cmd.getOr("logbs", 20);
     u64 nt = 1;
     //Mode mode = Mode::Dual;
 
     SilentOteGen t0, t1;
     auto sockets = LocalAsyncSocket::makePair();
 
+    t0.init(numot, numtri, bs, nt, Mode::Receiver, oc::ZeroBlock);
+    t1.init(numot, numtri, bs, nt, Mode::Sender, oc::OneBlock);
 
-    for (u64 t = 0; t < 3; ++t)
+    auto b0 = t0.requiredBaseOts();
+    auto b1 = t1.requiredBaseOts();
+
+    if (b0.mNumSend != b1.mRecvChoiceBits.size() ||
+        b1.mNumSend != b0.mRecvChoiceBits.size())
+        throw RTE_LOC;
+
+    std::vector<block> m0(b0.mRecvChoiceBits.size()), m1(b1.mRecvChoiceBits.size());
+    std::vector<std::array<block, 2>> mm0(b0.mNumSend), mm1(b1.mNumSend);
+
+    oc::PRNG prng(oc::CCBlock);
+    prng.get(mm0.data(), mm0.size());
+    prng.get(mm1.data(), mm1.size());
+    for (u64 i = 0; i < mm0.size(); ++i)
+        m1[i] = mm0[i][b1.mRecvChoiceBits[i]];
+    for (u64 i = 0; i < mm1.size(); ++i)
+        m0[i] = mm1[i][b0.mRecvChoiceBits[i]];
+    t0.setBaseOts(m0, mm0);
+    t1.setBaseOts(m1, mm1);
+
+    auto p0 = t0.expand(sockets[0]);
+    auto p1 = t1.expand(sockets[1]);
+    eval(p0, p1);
+    
+    for (u64 i = 0; i < static_cast<u64>(t0.mMult.size()); ++i)
     {
-        t0.init(n, bs, nt, Mode::Receiver, oc::ZeroBlock);
-        t1.init(n, bs, nt, Mode::Sender, oc::OneBlock);
+        if (neq((t0.mMult[i] & t1.mMult[i]) ^ t0.mAdd[i], t1.mAdd[i]))
+            throw std::runtime_error("");
 
-        auto b0 = t0.requiredBaseOts();
-        auto b1 = t1.requiredBaseOts();
-
-        if (b0.mNumSend != b1.mRecvChoiceBits.size() ||
-            b1.mNumSend != b0.mRecvChoiceBits.size())
-            throw RTE_LOC;
-
-        std::vector<block> m0(b0.mRecvChoiceBits.size()), m1(b1.mRecvChoiceBits.size());
-        std::vector<std::array<block, 2>> mm0(b0.mNumSend), mm1(b1.mNumSend);
-
-        oc::PRNG prng(oc::CCBlock);
-        prng.get(mm0.data(), mm0.size());
-        prng.get(mm1.data(), mm1.size());
-        for (u64 i = 0; i < mm0.size(); ++i)
-            m1[i] = mm0[i][b1.mRecvChoiceBits[i]];
-        for (u64 i = 0; i < mm1.size(); ++i)
-            m0[i] = mm1[i][b0.mRecvChoiceBits[i]];
-        t0.setBaseOts(m0, mm0);
-        t1.setBaseOts(m1, mm1);
-
-
-        auto p0 = t0.expand(sockets[0]);
-        auto p1 = t1.expand(sockets[1]);
-        eval(p0, p1);
-        
-        for (u64 i = 0; i < static_cast<u64>(t0.mMult.size()); ++i)
-        {
-            if (neq((t0.mMult[i] & t1.mMult[i]) ^ t0.mAdd[i], t1.mAdd[i]))
-                throw std::runtime_error("");
-
-            //if (neq((t1.mA[i] & t0.mC[i]) ^ t1.mB[i], t0.mD[i]))
-            //    throw std::runtime_error("");
-        }
+        //if (neq((t1.mA[i] & t0.mC[i]) ^ t1.mB[i], t0.mD[i]))
+        //    throw std::runtime_error("");
     }
     
-    std::cout << "Total Comm: " 
-            << sockets[0].bytesSent() 
-            << " + " << sockets[1].bytesSent() 
-            << " = " << (sockets[0].bytesSent() + sockets[1].bytesSent())
-            << " bytes" << std::endl;
+    std::cout << "Total Comm " 
+        // << sockets[0].bytesSent() 
+        // << " + " << sockets[1].bytesSent() 
+        << " = " << (float) (sockets[0].bytesSent() + sockets[1].bytesSent()) / (1 << 20)
+        << " MB" << std::endl;
 }
 
 void baseOT_Test(const oc::CLP& cmd)
 {
 
     u64 n = cmd.getOr("n", 1ull << 20);
-    u64 bs = cmd.getOr("bs", 1ull << 20);
+    u64 bs = cmd.getOr("bs", 1ull << 25);
     u64 nt = 1;
     
     SilentOteGen t0, t1;

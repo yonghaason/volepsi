@@ -16,7 +16,7 @@ namespace volePSI
 
 		benes.initialize(N, perm);
 		benes.genBenesRoute();
-		setTimePoint("PSSender::initialize");
+		// setTimePoint("PSSender::initialize");
 	}
 
 	Proto PSSender::genOT(oc::PRNG &prng, Socket &chl)
@@ -45,7 +45,7 @@ namespace volePSI
 
 		if (mRotRecvMsgs.size() < mNumSwitches) {
 			MC_AWAIT(genOT(prng, chl));
-			setTimePoint("PSSender::recv-OT");
+			// setTimePoint("PSSender::recv-OT");
 		}
 		else {
 			mRotRecvMsgs.resize(mNumSwitches);
@@ -60,11 +60,11 @@ namespace volePSI
 		}
 		bitCorrection = switches ^ mRotChoices;
 		MC_AWAIT(chl.send(bitCorrection));
-		setTimePoint("PSSender::send-bitcorrection");
+		// setTimePoint("PSSender::send-bitcorrection");
 
 		recvCorr.resize(switches.size());
 		MC_AWAIT(chl.recv(recvCorr));
-		setTimePoint("PSSender::recv-correction");
+		// setTimePoint("PSSender::recv-correction");
 
 		for (i = 0; i < recvMsg.size(); i++)
 		{
@@ -102,7 +102,7 @@ namespace volePSI
 		}
 
 		benes.benesMaskedEval(share, matrixRecvMsg);
-		setTimePoint("PSSender::maskedeval");
+		// setTimePoint("PSSender::maskedeval");
 
 		MC_END();
 	}
@@ -113,14 +113,14 @@ namespace volePSI
 		MC_BEGIN(Proto, this, &recvMsg, &prng, &chl,
 				 switches = oc::BitVector{},
 				 bitCorrection = oc::BitVector{},
-				 recvCorr = std::vector<std::array<bool, 2>>{},
+				//  recvCorr = std::vector<std::array<bool, 2>>{},
+				 recvCorr = std::vector<oc::BitVector>{},
 				 aes = AES{oc::ZeroBlock},
-				 temp = std::array<bool, 2>{},
 				 i = u64{});
 
 		if (mRotRecvMsgs.size() < mNumSwitches) {
 			MC_AWAIT(genOT(prng, chl));
-			setTimePoint("PSSender::recv-OT");
+			// setTimePoint("PSSender::recv-OT");
 		}
 		else {
 			mRotRecvMsgs.resize(mNumSwitches);
@@ -137,17 +137,25 @@ namespace volePSI
 		}
 		bitCorrection = switches ^ mRotChoices;		
 		MC_AWAIT(chl.send(bitCorrection));
-		setTimePoint("PSSender::send-bitcorrection");
+		// setTimePoint("PSSender::send-bitcorrection");
 
-		recvCorr.resize(switches.size());
-		MC_AWAIT(chl.recv(recvCorr));
-		setTimePoint("PSSender::recv-correction");
+		// recvCorr.resize(mNumSwitches);
+		// MC_AWAIT(chl.recv(recvCorr));
+
+		recvCorr.resize(2);
+		recvCorr[0].resize(mNumSwitches);
+		recvCorr[1].resize(mNumSwitches);
+
+		MC_AWAIT(chl.recv(recvCorr[0]));
+		MC_AWAIT(chl.recv(recvCorr[1]));
+		// setTimePoint("PSSender::recv-correction");
 
 		for (i = 0; i < recvMsg.size(); i++)
 		{
 			if (switches[i] == 1)
 			{
-				recvMsg[i] = {recvCorr[i][0] ^ recvMsg[i][0], recvCorr[i][1] ^ recvMsg[i][1]};
+				// recvMsg[i] = {recvCorr[i][0] ^ recvMsg[i][0], recvCorr[i][1] ^ recvMsg[i][1]};
+				recvMsg[i] = {recvCorr[0][i] ^ recvMsg[i][0], recvCorr[1][i] ^ recvMsg[i][1]};
 			}
 		}
 
@@ -177,7 +185,7 @@ namespace volePSI
 				matrixRecvMsg[i][j] = recvMsg[ctr++];
 		}
 		benes.benesMaskedEval(share, matrixRecvMsg);
-		setTimePoint("PSSender::maskedeval");
+		// setTimePoint("PSSender::maskedeval");
 
 		MC_END();
 	}

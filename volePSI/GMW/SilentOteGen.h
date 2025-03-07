@@ -52,15 +52,10 @@ namespace volePSI
 
         Proto expand(coproto::Socket& chl) {
             MC_BEGIN(Proto, this, &chl, comm = u64{});
-            comm = chl.bytesSent();
+            // comm = chl.bytesSent();
 
             MC_AWAIT(expandOt(chl));
             MC_AWAIT(expandTriple(chl));
-
-            comm = chl.bytesSent() - comm;
-            if (mMode & Mode::Receiver) std::cout << "OteReceiver::";
-            else std::cout << "OteSender::";
-            std::cout << "Expansion (" << mNumOts + mNumTriples << ") takes " << comm << " bytes" << std::endl;
 
             mHasBase = false;
             MC_END();
@@ -75,9 +70,7 @@ namespace volePSI
                 sMsg = oc::AlignedUnVector<std::array<block, 2>>{},
                 b = RequiredBase{},
                 baseOtSender = std::move(oc::SoftSpokenShOtSender{}),
-                baseOtRecver = std::move(oc::SoftSpokenShOtReceiver{}),
-                
-                comm = u64{}
+                baseOtRecver = std::move(oc::SoftSpokenShOtReceiver{})
             );
 
             setTimePoint("TripleGen::generateBaseOts begin");
@@ -85,21 +78,16 @@ namespace volePSI
             b = requiredBaseOts();
             if (b.mNumSend || b.mRecvChoiceBits.size())
             {
-                comm = chl.bytesSent();
 
                 rMsg.resize(b.mRecvChoiceBits.size());
                 sMsg.resize(b.mNumSend);
                 
                 if (partyIdx) { // Receiver
                     MC_AWAIT(baseOtRecver.receive(b.mRecvChoiceBits, rMsg, prng, chl));
-                    std::cout << "OTeReceiver::";
                 }
                 else {
                     MC_AWAIT(baseOtSender.send(sMsg, prng, chl));
-                    std::cout << "OTeSender::";
                 }
-                comm = chl.bytesSent() - comm;
-                std::cout << "BaseOT (" << b.mNumSend + b.mRecvChoiceBits.size() << ") takes " << comm << " bytes" << std::endl;
                 setBaseOts(rMsg, sMsg);
             }
             setTimePoint("TripleGen::generateBaseOts end");
@@ -117,8 +105,5 @@ namespace volePSI
         std::vector<block> mAVec, mBVec, mDVec;
         oc::BitVector mCBitVec;
     };
-
-
-
 }
 #endif

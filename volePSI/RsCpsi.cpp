@@ -25,8 +25,6 @@ namespace volePSI
                  cir = BetaCircuit{}
                 );
 
-        comm = chl.bytesSent();
-
         if (mSenderSize != Y.size() || mValueByteLength != values.cols())
             throw RTE_LOC;
 
@@ -88,7 +86,7 @@ namespace volePSI
                     }
                     else if (mType == ValueShareType::add32)
                     {
-                        assert(values.cols() % sizeof(u32) == 0);
+                        // assert(values.cols() % sizeof(u32) == 0);
                         auto ss = values.cols() / sizeof(u32);
                         auto tv = (u32 *)TvIter;
                         auto rr = (u32 *)&ret.mValues(i, 0);
@@ -112,8 +110,8 @@ namespace volePSI
             ++TyIter;
         }
 
-        // if (mTimer)
-        //     opprf->setTimer(*mTimer);
+        if (mTimer)
+            opprf->setTimer(*mTimer);
 
         MC_AWAIT(opprf->send(mRecverSize, Ty, Tv, mPrng, mNumThreads, chl));
 
@@ -126,6 +124,7 @@ namespace volePSI
         cmp.init(r.rows(), cir, mNumThreads, 1, mPrng.get(), mOteBatchSize);
 
         cmp.setInput(0, r);
+
         MC_AWAIT(cmp.run(chl));
 
         {
@@ -134,6 +133,7 @@ namespace volePSI
             std::copy(ss.begin(), ss.begin() + ret.mFlagBits.sizeBytes(), ret.mFlagBits.data());
         }
         setTimePoint("RsCpsiSender::GMW/EqShareGen");
+
 
         MC_END();
     }
@@ -151,10 +151,7 @@ namespace volePSI
                  r = Matrix<u8>{},
                  opprf = std::make_unique<RsOpprfReceiver>(),
                  cir = BetaCircuit{},
-                 prfTx = Matrix<u8>{},
-
-                 comm = u64{},
-                 commexp = u64{}
+                 prfTx = Matrix<u8>{}
                 );
 
         if (mRecverSize != X.size())
@@ -194,8 +191,8 @@ namespace volePSI
     
         prfTx.resize(X.size(), keyByteLength + mValueByteLength, oc::AllocType::Uninitialized);
 
-        // if (mTimer)
-        //     opprf->setTimer(*mTimer);
+        if (mTimer)
+            opprf->setTimer(*mTimer);
 
         MC_AWAIT(opprf->receive(mSenderSize * 3, Tx, prfTx, mPrng, mNumThreads, chl));
 
