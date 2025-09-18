@@ -88,7 +88,7 @@ namespace volePSI
                     {
                         // assert(values.cols() % sizeof(u32) == 0);
                         auto ss = values.cols() / sizeof(u32);
-                        auto tv = (u32 *)TvIter;
+                        auto tv = (u32 *)&*TvIter;
                         auto rr = (u32 *)&ret.mValues(i, 0);
                         for (u64 k = 0; k < ss; ++k)
                             tv[k] -= rr[k];

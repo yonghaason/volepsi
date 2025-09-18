@@ -37,7 +37,7 @@ namespace volePSI
             mVoleSender.setTimer(*mTimer);
 
         numThreads = std::max<u64>(1, numThreads);
-        mVoleSender.mNumThreads = numThreads;
+        // mVoleSender.mNumThreads = numThreads;
         // a + b  = c * d
         fork = chl.fork();
         fu = genVole(prng, fork, reducedRounds)

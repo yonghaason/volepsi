@@ -381,8 +381,10 @@ void perfPSI(oc::CLP& cmd)
 		prng.get(sendBase.data(), sendBase.size());
 		for (u64 i = 0; i < 128; ++i)
 			recvBase[i] = sendBase[i][recvChoice[i]];
-		recv.mRecver.mVoleRecver.setBaseOts(sendBase);
-		send.mSender.mVoleSender.setBaseOts(recvBase, recvChoice);
+		recv.mRecver.mVoleRecver.mOtExtSender.emplace();
+		send.mSender.mVoleSender.mOtExtRecver.emplace();
+		recv.mRecver.mVoleRecver.mOtExtSender->setBaseOts(recvBase, recvChoice);
+		send.mSender.mVoleSender.mOtExtRecver->setBaseOts(sendBase);
 		timer.setTimePoint("fakeBase");
 	}
 	recv.init(n, n, 40, ZeroBlock, mal, nt);
