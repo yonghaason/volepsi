@@ -34,7 +34,7 @@ if(VOLE_PSI_ENABLE_OPPRF)
 endif()
 
 add_library(volePSI STATIC ${SRCS})
-target_link_libraries(volePSI oc::libOTe sparsehash libdivide)
+target_link_libraries(volePSI oc::libOTe sparsehash libdivide SEAL::seal)
 
 if(APPLE)
     target_compile_options(volePSI PRIVATE

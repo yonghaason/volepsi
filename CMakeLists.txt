@@ -4,6 +4,8 @@ project(volePSI VERSION 0.1.2)
 
 set(VOLEPSI_BUILD ON)
 
+find_package(SEAL 4.3 REQUIRED HINTS "${CMAKE_SOURCE_DIR}/thirdparty/install/SEAL")
+
 # sets some variables
 include(cmake/preamble.cmake)
 

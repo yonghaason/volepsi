@@ -1,5 +1,6 @@
 #include "RsCpsi.h"
 
+#include <iostream>
 #include <sstream>
 #include <map>
 
@@ -22,11 +23,20 @@ namespace volePSI
                  TvIter = Matrix<u8>::iterator{},
                  rIter = Matrix<u8>::iterator{},
                  opprf = std::make_unique<RsOpprfSender>(),
-                 cir = BetaCircuit{}
+                 cir = BetaCircuit{},
+                 sentStart = u64{},
+                 recvStart = u64{},
+                 sentAfterOpprf = u64{},
+                 recvAfterOpprf = u64{},
+                 sentAfterGmw = u64{},
+                 recvAfterGmw = u64{}
                 );
 
         if (mSenderSize != Y.size() || mValueByteLength != values.cols())
             throw RTE_LOC;
+
+        sentStart = chl.bytesSent();
+        recvStart = chl.bytesReceived();
 
         MC_AWAIT(chl.recv(cuckooSeed));
         
@@ -115,6 +125,12 @@ namespace volePSI
 
         MC_AWAIT(opprf->send(mRecverSize, Ty, Tv, mPrng, mNumThreads, chl));
 
+        sentAfterOpprf = chl.bytesSent() - sentStart;
+        recvAfterOpprf = chl.bytesReceived() - recvStart;
+        std::cout << "RsCpsiSender::OPPRF comm: sent "
+                  << (double) sentAfterOpprf / (1 << 20) << " MB, recv "
+                  << (double) recvAfterOpprf / (1 << 20) << " MB, local total "
+                  << (double) (sentAfterOpprf + recvAfterOpprf) / (1 << 20) << " MB" << std::endl;
         setTimePoint("RsCpsiSender::OPPRF send");     
 
         // if (mTimer)
@@ -134,6 +150,14 @@ namespace volePSI
         }
         setTimePoint("RsCpsiSender::GMW/EqShareGen");
 
+        sentAfterGmw = chl.bytesSent() - sentStart;
+        recvAfterGmw = chl.bytesReceived() - recvStart;
+        std::cout << "RsCpsiSender::GMW comm: sent "
+                  << (double) (sentAfterGmw - sentAfterOpprf) / (1 << 20) << " MB, recv "
+                  << (double) (recvAfterGmw - recvAfterOpprf) / (1 << 20) << " MB, local total "
+                  << (double) ((sentAfterGmw - sentAfterOpprf) + (recvAfterGmw - recvAfterOpprf)) / (1 << 20) << " MB"
+                  << " / RsCpsi local total "
+                  << (double) (sentAfterGmw + recvAfterGmw) / (1 << 20) << " MB" << std::endl;
 
         MC_END();
     }
@@ -151,11 +175,20 @@ namespace volePSI
                  r = Matrix<u8>{},
                  opprf = std::make_unique<RsOpprfReceiver>(),
                  cir = BetaCircuit{},
-                 prfTx = Matrix<u8>{}
+                 prfTx = Matrix<u8>{},
+                 sentStart = u64{},
+                 recvStart = u64{},
+                 sentAfterOpprf = u64{},
+                 recvAfterOpprf = u64{},
+                 sentAfterGmw = u64{},
+                 recvAfterGmw = u64{}
                 );
 
         if (mRecverSize != X.size())
             throw RTE_LOC;
+
+        sentStart = chl.bytesSent();
+        recvStart = chl.bytesReceived();
 
         cuckooSeed = mPrng.get();
         MC_AWAIT(chl.send(std::move(cuckooSeed)));
@@ -196,6 +229,12 @@ namespace volePSI
 
         MC_AWAIT(opprf->receive(mSenderSize * 3, Tx, prfTx, mPrng, mNumThreads, chl));
 
+        sentAfterOpprf = chl.bytesSent() - sentStart;
+        recvAfterOpprf = chl.bytesReceived() - recvStart;
+        std::cout << "RsCpsiReceiver::OPPRF comm: sent "
+                  << (double) sentAfterOpprf / (1 << 20) << " MB, recv "
+                  << (double) recvAfterOpprf / (1 << 20) << " MB, local total "
+                  << (double) (sentAfterOpprf + recvAfterOpprf) / (1 << 20) << " MB" << std::endl;
         setTimePoint("RsCpsiReceiver::OPPRF receive");
 
         r.resize(numBins, keyByteLength + mValueByteLength, oc::AllocType::Uninitialized);
@@ -232,6 +271,15 @@ namespace volePSI
         }
 
         setTimePoint("RsCpsiReceiver::GMW/EqShareGen");
+
+        sentAfterGmw = chl.bytesSent() - sentStart;
+        recvAfterGmw = chl.bytesReceived() - recvStart;
+        std::cout << "RsCpsiReceiver::GMW comm: sent "
+                  << (double) (sentAfterGmw - sentAfterOpprf) / (1 << 20) << " MB, recv "
+                  << (double) (recvAfterGmw - recvAfterOpprf) / (1 << 20) << " MB, local total "
+                  << (double) ((sentAfterGmw - sentAfterOpprf) + (recvAfterGmw - recvAfterOpprf)) / (1 << 20) << " MB"
+                  << " / RsCpsi local total "
+                  << (double) (sentAfterGmw + recvAfterGmw) / (1 << 20) << " MB" << std::endl;
 
         MC_END();
     }

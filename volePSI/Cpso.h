@@ -19,18 +19,21 @@ namespace volePSI
         oc::BetaLibrary lib;
 
     public:
-        Proto setup(Socket& chl) {
+        Proto setup(Socket& chl, u64 batchSize = 0) {
             auto cuckoo = oc::CuckooIndex<>();
             cuckoo.init(mRecverSize, mSsp, 0, 3);
             auto numBins = cuckoo.mBins.size();
             auto keyBitLength = mSsp + oc::log2ceil(numBins);
             u64 numTriples = 128 * oc::divCeil(numBins, 128) * (keyBitLength - 1) * 2;
             mSetup = true;
-            u64 batchSize = 1;
-            while (batchSize < numTriples) 
+            if (batchSize == 0)
             {
-                batchSize <<= 1;
-                if (batchSize == (1ull << 25)) break;
+                batchSize = 1;
+                while (batchSize < numTriples) 
+                {
+                    batchSize <<= 1;
+                    if (batchSize == (1ull << 25)) break;
+                }
             }
 
             mOtFactory.init(0, numTriples, batchSize, mNumThreads, Mode::Sender, mPrng.get());
@@ -54,6 +57,7 @@ namespace volePSI
         Proto receiveThreshold(span<block> X, bool& res, const u64 threshold, Socket& chl);
 
         Proto receiveInnerProd(span<block> X, span<int32_t> data, int32_t& innerprod, Socket& chl);
+        Proto receiveInnerProdNew(span<block> X, span<int32_t> data, int32_t& innerprod, Socket& chl);
 
     };
 
@@ -63,18 +67,21 @@ namespace volePSI
         oc::BetaLibrary lib;
 
     public:
-        Proto setup(Socket& chl) {
+        Proto setup(Socket& chl, u64 batchSize = 0) {
             auto cuckoo = oc::CuckooIndex<>();
             cuckoo.init(mRecverSize, mSsp, 0, 3);
             auto numBins = cuckoo.mBins.size();
             auto keyBitLength = mSsp + oc::log2ceil(numBins);
             u64 numTriples = 128 * oc::divCeil(numBins, 128) * (keyBitLength - 1) * 2;
             mSetup = true;
-            u64 batchSize = 1;
-            while (batchSize < numTriples) 
+            if (batchSize == 0)
             {
-                batchSize <<= 1;
-                if (batchSize == (1ull << 25)) break;
+                batchSize = 1;
+                while (batchSize < numTriples) 
+                {
+                    batchSize <<= 1;
+                    if (batchSize == (1ull << 25)) break;
+                }
             }
             
             mOtFactory.init(0, numTriples, batchSize, mNumThreads, Mode::Receiver, mPrng.get());
@@ -99,6 +106,7 @@ namespace volePSI
         Proto sendThreshold(span<block> Y, Socket& chl);
 
         Proto sendInnerProd(span<block> Y, span<int32_t> data, Socket& chl);
+        Proto sendInnerProdNew(span<block> Y, span<int32_t> data, Socket& chl);
     };
     
 

@@ -1,14 +1,60 @@
+#include "seal/seal.h"
+
 #include "Cpso.h"
 #include "volePSI/PS/PSReceiver.h"
 #include "volePSI/PS/PSSender.h"
 #include "volePSI/GMW/Gmw.h"
 
+#include <algorithm>
 #include <bitset>
+#include <iostream>
+#include <memory>
+
 
 #include <sstream>
 
 namespace volePSI
 {
+    namespace
+    {
+        constexpr std::size_t polyModDeg = 4096;
+        constexpr int plainModBits = 31;
+
+        std::shared_ptr<seal::SEALContext> makeInnerProdHeContext()
+        {
+            seal::EncryptionParameters parms(seal::scheme_type::bgv);
+            parms.set_poly_modulus_degree(polyModDeg);
+            parms.set_coeff_modulus(
+                seal::CoeffModulus::Create(polyModDeg, {45, 35, 40}));
+            parms.set_plain_modulus(seal::PlainModulus::Batching(polyModDeg, plainModBits));
+            return std::make_shared<seal::SEALContext>(parms, true, seal::sec_level_type::none);
+        }
+
+        u64 toHeMod(i64 value, u64 modulus)
+        {
+            if (value >= 0)
+                return static_cast<u64>(value) % modulus;
+
+            auto mag = static_cast<u64>(-(value + 1)) + 1;
+            auto rem = mag % modulus;
+            return rem ? modulus - rem : 0;
+        }
+
+        u64 addHeMod(u64 a, u64 b, u64 modulus)
+        {
+            a += b;
+            return a >= modulus ? a - modulus : a;
+        }
+
+        i32 fromHeMod(u64 value, u64 modulus)
+        {
+            i64 signedValue = value > modulus / 2 ?
+                static_cast<i64>(value) - static_cast<i64>(modulus) :
+                static_cast<i64>(value);
+            return static_cast<i32>(signedValue);
+        }
+    }
+
     Proto PsoSender::sendCardinality(span<block> Y, Socket &chl)
     {
         MC_BEGIN(Proto, this, Y, &chl,
@@ -328,9 +374,9 @@ namespace volePSI
         }
     
         setTimePoint("PsoReceiver::Sum::OT recv");
-        // comm = chl.bytesSent() - comm;
-        // commexp = 0;
-        // std::cout << "PsoReceiver::OT = " << comm << " bytes / expected: " << commexp << " bytes" << std::endl;
+        comm = chl.bytesSent() - comm;
+        commexp = 0;
+        std::cout << "PsoReceiver::OT = " << comm << " bytes / expected: " << commexp << " bytes" << std::endl;
 
         MC_END();
     } // recvSum
@@ -411,9 +457,9 @@ namespace volePSI
         MC_AWAIT(chl.send(std::move(sThr)));
         
         setTimePoint("PsoSender::Threshold::2PC");
-        // comm = chl.bytesSent() - comm;
-        // commexp = (u64) cardByteLength * s.mFlagBits.size();
-        // std::cout << "PsoSender::OT = " << comm << " bytes / expected: " << commexp << " bytes" << std::endl;
+        comm = chl.bytesSent() - comm;
+        commexp = (u64) cardByteLength * s.mFlagBits.size();
+        std::cout << "PsoSender::OT = " << comm << " bytes / expected: " << commexp << " bytes" << std::endl;
 
         MC_END();
     }
@@ -743,6 +789,375 @@ namespace volePSI
         MC_END();
     }
 
+    Proto PsoSender::sendInnerProdNew(span<block> Y, span<int32_t> data, Socket& chl)
+    {
+        MC_BEGIN(Proto, this, Y, data, &chl,
+                 s = RsCpsiReceiver::Sharing{},
+                 cpsiReceiver = std::make_unique<RsCpsiReceiver>(),
+                 clearShares = std::vector<int32_t>{},
+                 invMapping = std::vector<u64>{},
+                 reorderedData = std::vector<int32_t>{},
+
+                 rot1Sender = std::make_unique<oc::SilentOtExtSender>(),
+                 rot1Msgs = std::vector<std::array<block, 2>>{},
+                 ot1Msgs = std::vector<std::array<int32_t, 2>>{},
+
+                 rot2Receiver = std::make_unique<oc::SilentOtExtReceiver>(),
+                 rot2Msgs = std::vector<oc::block>{},
+                 ot2Msgs = std::vector<std::array<int32_t, 2>>{},
+
+                 heContext = std::shared_ptr<seal::SEALContext>{},
+                 heBatchEncoder = std::unique_ptr<seal::BatchEncoder>{},
+                 heEvaluator = std::unique_ptr<seal::Evaluator>{},
+                 heCipher = seal::Ciphertext{},
+                 heSharePlain = seal::Plaintext{},
+                 heDataPlain = seal::Plaintext{},
+                 heMaskPlain = seal::Plaintext{},
+                 plainVec = std::vector<u64>{},
+                 ctxtStream = std::stringstream{},
+                 outCtxtStream = std::stringstream{},
+                 ctxtString = std::string{},
+                 ctxtBytes = std::vector<u8>{},
+
+                 r = int32_t{},
+                 tmp = int32_t{},
+                 i = u64{},
+                 slot = u64{},
+                 chunkBase = u64{},
+                 validSlots = u64{},
+                 numCiphertexts = u64{},
+                 heSlotCount = u64{},
+                 hePlainModulus = u64{},
+                 mask = u64{},
+                 maskSum = u64{},
+                 ctxtSize = u64{},
+                 commBeforeHe = u64{},
+                 commAfterHe = u64{},
+                 recvStart = u64{},
+                 recvBeforeHe = u64{},
+                 recvAfterHe = u64{}
+                 );
+
+        assert(mSenderSize == Y.size());
+
+        comm = chl.bytesSent();
+        recvStart = chl.bytesReceived();
+        cpsiReceiver->init(mSenderSize, mRecverSize, sizeof(int32_t), mSsp, mPrng.get(), mNumThreads, (1ull << 20), ValueShareType::add32);
+        if (mSetup) {
+            cpsiReceiver->setTriple(mOtFactory.mMult, mOtFactory.mAdd, mOtFactory.mNumTriples);
+        }
+        MC_AWAIT(cpsiReceiver->receive(Y, s, chl));
+        setTimePoint("PsoSender::InnerProdNew::Cpsi receive");
+
+        // Clear out 1st OT
+        rot1Msgs.resize(s.mFlagBits.size());
+        rot1Sender->configure(s.mFlagBits.size(), 2, mNumThreads);
+        MC_AWAIT(rot1Sender->send(rot1Msgs, mPrng, chl));
+
+        ot1Msgs.resize(s.mFlagBits.size());
+        clearShares.resize(s.mFlagBits.size());
+        for (i = 0; i < s.mFlagBits.size(); i++)
+        {
+            r = mPrng.get<int32_t>();
+            memcpy(&tmp, s.mValues[i].data(), sizeof(int32_t));
+            ot1Msgs[i][s.mFlagBits[i]] = rot1Msgs[i][s.mFlagBits[i]].mData[0] + r;
+            ot1Msgs[i][!s.mFlagBits[i]] = rot1Msgs[i][!s.mFlagBits[i]].mData[0] + r + tmp;
+            clearShares[i] = -r;
+        }
+        MC_AWAIT(chl.send(ot1Msgs));
+
+        // Clear out 2nd OT
+        rot2Msgs.resize(s.mFlagBits.size());
+        rot2Receiver->configure(s.mFlagBits.size(), 2, mNumThreads);
+        MC_AWAIT(rot2Receiver->receive(s.mFlagBits, rot2Msgs, mPrng, chl));
+
+        ot2Msgs.resize(s.mFlagBits.size());
+        MC_AWAIT(chl.recv(ot2Msgs));
+
+        for (i = 0; i < ot2Msgs.size(); i++) {
+            clearShares[i] += ot2Msgs[i][s.mFlagBits[i]] - rot2Msgs[i].mData[0];
+        }
+        commBeforeHe = chl.bytesSent() - comm;
+        recvBeforeHe = chl.bytesReceived() - recvStart;
+        std::cout << "PsoSender::InnerProdNew pre-HE: sent "
+                  << (double) commBeforeHe / (1 << 20) << " MB, recv "
+                  << (double) recvBeforeHe / (1 << 20) << " MB, local total "
+                  << (double) (commBeforeHe + recvBeforeHe) / (1 << 20) << " MB" << std::endl;
+        setTimePoint("PsoSender::InnerProdNew::Clear out");
+
+        invMapping.resize(s.mFlagBits.size(), ~u64(0));
+        for (i = 0; i < Y.size(); i++) {
+            invMapping[s.mMapping[i]] = i;
+        }
+
+        reorderedData.resize(s.mFlagBits.size());
+        for (i = 0; i < s.mFlagBits.size(); i++)
+        {
+            reorderedData[i] = invMapping[i] != ~u64(0) ? data[invMapping[i]] : 0;
+        }
+
+        heContext = makeInnerProdHeContext();
+        heBatchEncoder = std::make_unique<seal::BatchEncoder>(*heContext);
+        heEvaluator = std::make_unique<seal::Evaluator>(*heContext);
+        hePlainModulus = heContext->first_context_data()->parms().plain_modulus().value();
+        heSlotCount = static_cast<u64>(heBatchEncoder->slot_count());
+        numCiphertexts = oc::divCeil(s.mFlagBits.size(), heSlotCount);
+
+        MC_AWAIT(chl.recv(ctxtSize));
+        ctxtBytes.resize(ctxtSize);
+        MC_AWAIT(chl.recv(ctxtBytes));
+        ctxtString.assign(reinterpret_cast<const char*>(ctxtBytes.data()), ctxtBytes.size());
+        std::cout << "numCiphertexts = " << numCiphertexts << ", heSlotCount = " << heSlotCount << std::endl;
+        std::cout << "R->S ctxtBytes.size() = " << ctxtBytes.size() << std::endl;
+
+        ctxtStream.clear();
+        ctxtStream.str(ctxtString);
+        ctxtBytes.clear();
+        ctxtString.clear();
+
+        plainVec.resize(heSlotCount);
+        maskSum = 0;
+
+        outCtxtStream.clear();
+        outCtxtStream.str("");
+
+        for (i = 0; i < numCiphertexts; i++)
+        {
+            heCipher.load(*heContext, ctxtStream);
+            chunkBase = i * heSlotCount;
+            validSlots = std::min<u64>(heSlotCount, s.mFlagBits.size() - chunkBase);
+
+            std::fill(plainVec.begin(), plainVec.end(), 0);
+            for (slot = 0; slot < validSlots; slot++) {
+                plainVec[slot] = toHeMod(clearShares[chunkBase + slot], hePlainModulus);
+            }
+            heBatchEncoder->encode(plainVec, heSharePlain);
+
+            std::fill(plainVec.begin(), plainVec.end(), 0);
+            for (slot = 0; slot < validSlots; slot++) {
+                plainVec[slot] = toHeMod(reorderedData[chunkBase + slot], hePlainModulus);
+            }
+            heBatchEncoder->encode(plainVec, heDataPlain);
+
+            std::fill(plainVec.begin(), plainVec.end(), 0);
+            for (slot = 0; slot < validSlots; slot++)
+            {
+                if (chunkBase + slot + 1 == s.mFlagBits.size())
+                {
+                    mask = maskSum ? hePlainModulus - maskSum : 0;
+                }
+                else
+                {
+                    mask = mPrng.get<u64>() % hePlainModulus;
+                    maskSum = addHeMod(maskSum, mask, hePlainModulus);
+                }
+                plainVec[slot] = mask;
+            }
+            heBatchEncoder->encode(plainVec, heMaskPlain);
+
+            heEvaluator->add_plain_inplace(heCipher, heSharePlain);
+            heEvaluator->multiply_plain_inplace(heCipher, heDataPlain);
+            heEvaluator->add_plain_inplace(heCipher, heMaskPlain);
+            heEvaluator->mod_switch_to_next_inplace(heCipher);
+            heCipher.save(outCtxtStream);
+        }
+
+        ctxtString = outCtxtStream.str();
+        ctxtBytes.assign(ctxtString.begin(), ctxtString.end());
+        ctxtSize = ctxtBytes.size();
+        std::cout << "S->R ctxtBytes.size() = " << ctxtBytes.size() << std::endl;
+
+        MC_AWAIT(chl.send(ctxtSize));
+        MC_AWAIT(chl.send(std::move(ctxtBytes)));
+        MC_AWAIT(chl.flush());
+        commAfterHe = chl.bytesSent() - comm;
+        recvAfterHe = chl.bytesReceived() - recvStart;
+        std::cout << "PsoSender::InnerProdNew HE phase: sent "
+                  << (double) (commAfterHe - commBeforeHe) / (1 << 20) << " MB, recv "
+                  << (double) (recvAfterHe - recvBeforeHe) / (1 << 20) << " MB, local total "
+                  << (double) ((commAfterHe - commBeforeHe) + (recvAfterHe - recvBeforeHe)) / (1 << 20) << " MB"
+                  << " / online local total "
+                  << (double) (commAfterHe + recvAfterHe) / (1 << 20) << " MB" << std::endl;
+        setTimePoint("PsoSender::InnerProdNew::HE MultShare");
+
+        MC_END();
+    }
+
+    Proto PsoReceiver::receiveInnerProdNew(span<block> X, span<int32_t> data, int32_t& innerProd, Socket& chl)
+    {
+        MC_BEGIN(Proto, this, X, data, &innerProd, &chl,
+                 s = RsCpsiSender::Sharing{},
+                 cpsiSender = std::make_unique<RsCpsiSender>(),
+                 dataInMatrix = oc::Matrix<u8>{},
+                 clearShares = std::vector<int32_t>{},
+
+                 rot1Receiver = std::make_unique<oc::SilentOtExtReceiver>(),
+                 rot1Msgs = std::vector<oc::block>{},
+                 ot1Msgs = std::vector<std::array<int32_t, 2>>{},
+
+                 rot2Sender = std::make_unique<oc::SilentOtExtSender>(),
+                 rot2Msgs = std::vector<std::array<block, 2>>{},
+                 ot2Msgs = std::vector<std::array<int32_t, 2>>{},
+
+                 heContext = std::shared_ptr<seal::SEALContext>{},
+                 heKeygen = std::unique_ptr<seal::KeyGenerator>{},
+                 heSecretKey = seal::SecretKey{},
+                 heBatchEncoder = std::unique_ptr<seal::BatchEncoder>{},
+                 heEncryptor = std::unique_ptr<seal::Encryptor>{},
+                 heDecryptor = std::unique_ptr<seal::Decryptor>{},
+                 hePlain = seal::Plaintext{},
+                 heCipher = seal::Ciphertext{},
+                 plainVec = std::vector<u64>{},
+                 ctxtStream = std::stringstream{},
+                 ctxtString = std::string{},
+                 ctxtBytes = std::vector<u8>{},
+
+                 r = int32_t{},
+                 tmp = int32_t{},
+                 i = u64{},
+                 slot = u64{},
+                 chunkBase = u64{},
+                 validSlots = u64{},
+                 numCiphertexts = u64{},
+                 heSlotCount = u64{},
+                 hePlainModulus = u64{},
+                 sumMod = u64{},
+                 ctxtSize = u64{},
+                 commBeforeHe = u64{},
+                 commAfterHe = u64{},
+                 recvStart = u64{},
+                 recvBeforeHe = u64{},
+                 recvAfterHe = u64{}
+                );
+        assert(mReceiverSize == X.size());
+
+        comm = chl.bytesSent();
+        recvStart = chl.bytesReceived();
+        dataInMatrix.resize(X.size(), sizeof(int32_t));
+        std::memcpy(dataInMatrix.data(), (u8*) data.data(), X.size() * sizeof(int32_t));
+
+        cpsiSender->init(mSenderSize, mRecverSize, sizeof(int32_t), mSsp, mPrng.get(), mNumThreads, (1ull << 20), ValueShareType::add32);
+        if (mSetup) {
+            cpsiSender->setTriple(mOtFactory.mMult, mOtFactory.mAdd, mOtFactory.mNumTriples);
+        }
+        MC_AWAIT(cpsiSender->send(X, dataInMatrix, s, chl));
+        setTimePoint("PsoReceiver::InnerProdNew::Cpsi send");
+
+        // Clear out 1st OT
+        rot1Msgs.resize(s.mFlagBits.size());
+        rot1Receiver->configure(s.mFlagBits.size(), 2, mNumThreads);
+        MC_AWAIT(rot1Receiver->receive(s.mFlagBits, rot1Msgs, mPrng, chl));
+
+        clearShares.resize(s.mFlagBits.size());
+        ot1Msgs.resize(s.mFlagBits.size());
+        MC_AWAIT(chl.recv(ot1Msgs));
+
+        for (i = 0; i < ot1Msgs.size(); i++) {
+            clearShares[i] = ot1Msgs[i][s.mFlagBits[i]] - rot1Msgs[i].mData[0];
+        }
+
+        // Clear out 2nd OT
+        rot2Msgs.resize(s.mFlagBits.size());
+        rot2Sender->configure(s.mFlagBits.size(), 2, mNumThreads);
+        MC_AWAIT(rot2Sender->send(rot2Msgs, mPrng, chl));
+
+        ot2Msgs.resize(s.mFlagBits.size());
+
+        for (i = 0; i < s.mFlagBits.size(); i++)
+        {
+            r = mPrng.get<int32_t>();
+            memcpy(&tmp, s.mValues[i].data(), sizeof(int32_t));
+            ot2Msgs[i][s.mFlagBits[i]] = rot2Msgs[i][s.mFlagBits[i]].mData[0] + r;
+            ot2Msgs[i][!s.mFlagBits[i]] = rot2Msgs[i][!s.mFlagBits[i]].mData[0] + r + tmp;
+            clearShares[i] -= r;
+        }
+
+        MC_AWAIT(chl.send(ot2Msgs));
+        commBeforeHe = chl.bytesSent() - comm;
+        recvBeforeHe = chl.bytesReceived() - recvStart;
+        std::cout << "PsoReceiver::InnerProdNew pre-HE: sent "
+                  << (double) commBeforeHe / (1 << 20) << " MB, recv "
+                  << (double) recvBeforeHe / (1 << 20) << " MB, local total "
+                  << (double) (commBeforeHe + recvBeforeHe) / (1 << 20) << " MB" << std::endl;
+        setTimePoint("PsoReceiver::InnerProdNew::Clear out");
+
+        heContext = makeInnerProdHeContext();
+        heKeygen = std::make_unique<seal::KeyGenerator>(*heContext);
+        heSecretKey = heKeygen->secret_key();
+        heBatchEncoder = std::make_unique<seal::BatchEncoder>(*heContext);
+        heEncryptor = std::make_unique<seal::Encryptor>(*heContext, heSecretKey);
+        heDecryptor = std::make_unique<seal::Decryptor>(*heContext, heSecretKey);
+        hePlainModulus = heContext->first_context_data()->parms().plain_modulus().value();
+        heSlotCount = static_cast<u64>(heBatchEncoder->slot_count());
+        numCiphertexts = oc::divCeil(s.mFlagBits.size(), heSlotCount);
+
+        plainVec.resize(heSlotCount);
+        ctxtStream.clear();
+        ctxtStream.str("");
+        for (i = 0; i < numCiphertexts; i++)
+        {
+            chunkBase = i * heSlotCount;
+            validSlots = std::min<u64>(heSlotCount, s.mFlagBits.size() - chunkBase);
+
+            std::fill(plainVec.begin(), plainVec.end(), 0);
+            for (slot = 0; slot < validSlots; slot++) {
+                plainVec[slot] = toHeMod(clearShares[chunkBase + slot], hePlainModulus);
+            }
+
+            heBatchEncoder->encode(plainVec, hePlain);
+            heEncryptor->encrypt_symmetric(hePlain).save(ctxtStream);
+        }
+
+        ctxtString = ctxtStream.str();
+        ctxtBytes.assign(ctxtString.begin(), ctxtString.end());
+        ctxtSize = ctxtBytes.size();
+        MC_AWAIT(chl.send(ctxtSize));
+        MC_AWAIT(chl.send(std::move(ctxtBytes)));
+        MC_AWAIT(chl.flush());
+
+        MC_AWAIT(chl.recv(ctxtSize));
+        ctxtBytes.resize(ctxtSize);
+        MC_AWAIT(chl.recv(ctxtBytes));
+        ctxtString.assign(reinterpret_cast<const char*>(ctxtBytes.data()), ctxtBytes.size());
+        
+        ctxtStream.clear();
+        ctxtStream.str(ctxtString);
+
+        sumMod = 0;
+
+        for (i = 0; i < numCiphertexts; i++)
+        {
+            heCipher.load(*heContext, ctxtStream);
+            heDecryptor->decrypt(heCipher, hePlain);
+
+            if (i ==0 ) {            
+                std::cout << "Noise Budget: "
+                << heDecryptor->invariant_noise_budget(heCipher) << std::endl;
+            }
+            heBatchEncoder->decode(hePlain, plainVec);
+            
+
+            chunkBase = i * heSlotCount;
+            validSlots = std::min<u64>(heSlotCount, s.mFlagBits.size() - chunkBase);
+            for (slot = 0; slot < validSlots; slot++) {
+                sumMod = addHeMod(sumMod, plainVec[slot], hePlainModulus);
+            }
+        }
+
+        innerProd = fromHeMod(sumMod, hePlainModulus);
+        commAfterHe = chl.bytesSent() - comm;
+        recvAfterHe = chl.bytesReceived() - recvStart;
+        std::cout << "PsoReceiver::InnerProdNew HE phase: sent "
+                  << (double) (commAfterHe - commBeforeHe) / (1 << 20) << " MB, recv "
+                  << (double) (recvAfterHe - recvBeforeHe) / (1 << 20) << " MB, local total "
+                  << (double) ((commAfterHe - commBeforeHe) + (recvAfterHe - recvBeforeHe)) / (1 << 20) << " MB"
+                  << " / online local total "
+                  << (double) (commAfterHe + recvAfterHe) / (1 << 20) << " MB" << std::endl;
+        setTimePoint("PsoReceiver::InnerProdNew::HE MultShare");
+
+        MC_END();
+    }
+
     Proto CpsuReceiver::receive(span<block> X, std::vector<block> &D, Socket &chl)
     {
         MC_BEGIN(Proto, this, X, &D, &chl,
@@ -903,4 +1318,3 @@ namespace volePSI
         MC_END();
     }
 }
-

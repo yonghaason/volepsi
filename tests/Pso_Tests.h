@@ -9,3 +9,4 @@ void Pso_sum_blk_test(const oc::CLP& cmd);
 void Pso_sum_32_test(const oc::CLP& cmd);
 void Pso_thres_test(const oc::CLP &cmd);
 void Pso_innerprod_32_test(const oc::CLP &cmd);
+void Pso_innerprod_32_new_test(const oc::CLP &cmd);

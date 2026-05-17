@@ -105,6 +105,7 @@ namespace volePSI_Tests
         t.add("Psi_sum_32_test             ", Pso_sum_32_test);
         t.add("Psi_thres_test              ", Pso_thres_test);
         t.add("Psi_innerprod_32_test       ", Pso_innerprod_32_test);
+        t.add("Psi_innerprod_32_new_test   ", Pso_innerprod_32_new_test);
 
     });
 }
